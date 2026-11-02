@@ -71,6 +71,7 @@ async function reset() {
   if (resetting) return;
   resetting = true;
   sim = await createRapierSim();
+  prev = curr = takeSnapshot();
   resetting = false;
 }
 window.addEventListener('keydown', (e) => {
@@ -86,7 +87,6 @@ const LOOK_RECENTER_AFTER_MS = 2500;
 let lookYaw = 0; // radians around the car, 0 is straight behind
 let lookPitch = DEFAULT_PITCH;
 let lastLook = 0;
-let lastFrame = performance.now();
 
 renderer.domElement.addEventListener('click', () => {
   void renderer.domElement.requestPointerLock();
@@ -98,9 +98,36 @@ window.addEventListener('mousemove', (e) => {
   lastLook = performance.now();
 });
 
-const camPos = new THREE.Vector3();
+// Physics runs at a fixed 60 steps a second but the screen may draw 144 frames a second.
+// Each frame we draw the car at a blend between the last two physics states, otherwise the
+// car only moves on some frames and the whole world looks like it is shaking at high speed.
+interface Snapshot {
+  chassisPos: THREE.Vector3;
+  chassisQuat: THREE.Quaternion;
+  wheelPos: THREE.Vector3[];
+  wheelQuat: THREE.Quaternion[];
+}
+function takeSnapshot(): Snapshot {
+  const c = sim.chassis();
+  const w = sim.wheels();
+  return {
+    chassisPos: new THREE.Vector3(...c.position),
+    chassisQuat: new THREE.Quaternion(...c.quaternion),
+    wheelPos: w.map((x) => new THREE.Vector3(...x.position)),
+    wheelQuat: w.map((x) => new THREE.Quaternion(...x.quaternion)),
+  };
+}
+let prev = takeSnapshot();
+let curr = prev;
+
 const camTarget = new THREE.Vector3();
+const camPos = new THREE.Vector3();
 const back = new THREE.Vector3();
+const CAM_HEADING_RATE = 6; // per second: how quickly the camera swings round behind the car
+const CAM_HEIGHT_RATE = 8; // per second: smooths out small bumps in the car's height
+let camHeading = 0;
+let camY = 0;
+let camReady = false;
 let last = performance.now();
 let accumulator = 0;
 let frames = 0;
@@ -108,42 +135,54 @@ let fpsClock = last;
 let fps = 0;
 
 renderer.setAnimationLoop((now) => {
-  accumulator += Math.min((now - last) / 1000, 0.1);
+  const dt = Math.min((now - last) / 1000, 0.1);
+  accumulator += dt;
   last = now;
 
   const input = readInput();
   while (accumulator >= STEP) {
     sim.step(STEP, input);
+    prev = curr;
+    curr = takeSnapshot();
     accumulator -= STEP;
   }
+  if (curr.chassisPos.y < -20) void reset(); // fell off the world
 
-  const c = sim.chassis();
-  if (c.position[1] < -20) void reset(); // fell off the world
-
-  car.body.position.set(...c.position);
-  car.body.quaternion.set(...c.quaternion);
-  sim.wheels().forEach((w, i) => {
-    car.wheels[i].position.set(...w.position);
-    car.wheels[i].quaternion.set(...w.quaternion);
+  const alpha = accumulator / STEP;
+  car.body.position.lerpVectors(prev.chassisPos, curr.chassisPos, alpha);
+  car.body.quaternion.slerpQuaternions(prev.chassisQuat, curr.chassisQuat, alpha);
+  car.wheels.forEach((wheel, i) => {
+    wheel.position.lerpVectors(prev.wheelPos[i], curr.wheelPos[i], alpha);
+    wheel.quaternion.slerpQuaternions(prev.wheelQuat[i], curr.wheelQuat[i], alpha);
   });
 
-  // Chase camera: behind the car, following its heading, with the mouse looking around it.
-  // With no mouse movement for a moment, it drifts back to straight behind the car.
+  // Chase camera: rigidly behind the car, so it never lags or stretches at speed. Only the
+  // heading and the height are smoothed. The mouse looks around the car. With no mouse
+  // movement for a moment, the view drifts back to straight behind the car.
   if (now - lastLook > LOOK_RECENTER_AFTER_MS) {
-    const k = 1 - Math.exp(-2 * (now - lastFrame) / 1000);
+    const k = 1 - Math.exp(-2 * dt);
     lookYaw -= lookYaw * k;
     lookPitch += (DEFAULT_PITCH - lookPitch) * k;
   }
-  lastFrame = now;
-  back.set(0, 0, -1).applyQuaternion(car.body.quaternion);
-  back.y = 0;
-  back.normalize().applyAxisAngle(UP, lookYaw);
-  camTarget.copy(car.body.position).setY(car.body.position.y + 1);
+  back.set(0, 0, 1).applyQuaternion(car.body.quaternion);
+  const carHeading = Math.atan2(back.x, back.z);
+  if (!camReady) {
+    camHeading = carHeading;
+    camY = car.body.position.y;
+    camReady = true;
+  }
+  let diff = carHeading - camHeading;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // shortest way round
+  camHeading += diff * (1 - Math.exp(-CAM_HEADING_RATE * dt));
+  camY += (car.body.position.y - camY) * (1 - Math.exp(-CAM_HEIGHT_RATE * dt));
+
+  back.set(-Math.sin(camHeading), 0, -Math.cos(camHeading)).applyAxisAngle(UP, lookYaw);
+  camTarget.set(car.body.position.x, camY + 1, car.body.position.z);
   camPos
     .copy(camTarget)
     .addScaledVector(back, Math.cos(lookPitch) * CAM_DISTANCE)
     .setY(camTarget.y + Math.sin(lookPitch) * CAM_DISTANCE);
-  camera.position.lerp(camPos, 0.12);
+  camera.position.copy(camPos);
   camera.lookAt(camTarget);
 
   renderer.render(scene, camera);
