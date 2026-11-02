@@ -14,6 +14,8 @@ export interface Hud {
   /** Walking shows a crosshair. Driving shows the speedometer. */
   setMode(mode: 'walking' | 'driving'): void;
   setSpeed(kmh: number): void;
+  /** Hunger and thirst, each 0 (empty) to 100 (full). */
+  setNeeds(needs: { hunger: number; thirst: number }): void;
   /** Small controls reminder in the corner. */
   setHint(text: string): void;
   /** Developer readout: frame rate and so on. Empty text hides it. */
@@ -49,6 +51,22 @@ export function createHud(parent: HTMLElement): Hud {
   const speedValue = el('div', 'hud-speed-value', speed, '0');
   el('div', 'hud-speed-unit', speed, 'km/h');
   speed.hidden = true;
+
+  const needs = el('div', 'hud-needs', root);
+  function needBar(label: string) {
+    const row = el('div', 'hud-need', needs);
+    el('span', 'hud-need-label', row, label);
+    const track = el('div', 'hud-need-track', row);
+    return { row, fill: el('div', 'hud-need-fill', track) };
+  }
+  const hungerBar = needBar('Hunger');
+  const thirstBar = needBar('Thirst');
+  function showNeed(bar: { row: HTMLElement; fill: HTMLElement }, value: number) {
+    const pct = Math.round(Math.min(100, Math.max(0, value)));
+    const width = `${pct}%`;
+    if (bar.fill.style.width !== width) bar.fill.style.width = width;
+    bar.row.classList.toggle('low', pct < 25);
+  }
 
   const panel = el('div', 'hud-inventory', root);
   const title = el('div', 'hud-inventory-title', panel);
@@ -113,6 +131,10 @@ export function createHud(parent: HTMLElement): Hud {
     setSpeed(kmh) {
       const text = String(Math.round(kmh));
       if (speedValue.textContent !== text) speedValue.textContent = text;
+    },
+    setNeeds(n) {
+      showNeed(hungerBar, n.hunger);
+      showNeed(thirstBar, n.thirst);
     },
     setHint(text) {
       if (hint.textContent !== text) hint.textContent = text;

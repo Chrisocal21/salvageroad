@@ -8,12 +8,14 @@ export interface ItemDef {
   kind: ItemKind;
   /** How many fit in one inventory slot. */
   stack: number;
+  /** Eating or drinking this restores this much of the hunger or thirst bar (0 to 100 scale). */
+  restores?: number;
 }
 
 export const ITEMS: Record<string, ItemDef> = {
-  canned_beans: { id: 'canned_beans', name: 'canned beans', kind: 'food', stack: 6 },
-  crackers: { id: 'crackers', name: 'crackers', kind: 'food', stack: 6 },
-  water_bottle: { id: 'water_bottle', name: 'water bottle', kind: 'drink', stack: 4 },
+  canned_beans: { id: 'canned_beans', name: 'canned beans', kind: 'food', stack: 6, restores: 35 },
+  crackers: { id: 'crackers', name: 'crackers', kind: 'food', stack: 6, restores: 15 },
+  water_bottle: { id: 'water_bottle', name: 'water bottle', kind: 'drink', stack: 4, restores: 40 },
   scrap_metal: { id: 'scrap_metal', name: 'scrap metal', kind: 'material', stack: 20 },
   duct_tape: { id: 'duct_tape', name: 'duct tape', kind: 'material', stack: 5 },
   rope: { id: 'rope', name: 'rope', kind: 'material', stack: 5 },

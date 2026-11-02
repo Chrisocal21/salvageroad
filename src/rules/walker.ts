@@ -25,11 +25,13 @@ export interface WalkInput {
   forward: number; // -1 to 1
   right: number; // -1 to 1
   run: boolean;
+  /** Multiplies speed, for example when weak from hunger. Defaults to 1. */
+  speedScale?: number;
 }
 
 /** Moves the walker for one frame and slides it out of anything it overlaps. */
 export function stepWalker(w: Walker, input: WalkInput, dt: number, solids: Box2[], turned: Obb2[]): void {
-  const speed = input.run ? WALKER.runSpeed : WALKER.walkSpeed;
+  const speed = (input.run ? WALKER.runSpeed : WALKER.walkSpeed) * (input.speedScale ?? 1);
   let f = input.forward;
   let r = input.right;
   const len = Math.hypot(f, r);

@@ -176,3 +176,19 @@ Built (src/ui/hud.ts and hud.css), behind a small interface so the game code nev
 Claude's choices that Chris did not specify: Tab and I as the inventory keys, the position and style of everything above, and the 4 s toast time.
 
 Tests: 5 HUD tests run in a simulated browser page (jsdom was added as a dev dependency). The HUD has NOT been seen in a real browser yet.
+
+## 2026-11-02 Hunger and thirst (built, not yet seen in a browser)
+
+Chris said to keep going; Claude picked the next unbuilt Phase 1 item, survival (Feature 1.3), because food and drink could already be looted but not used.
+
+Decided by Claude (Chris did not specify), all numbers are placeholders to tune by feel:
+- Two bars, hunger and thirst, from 100 (full) to 0. Hunger empties in 20 minutes, thirst in 12. They drain the same on foot and in the truck.
+- F eats, Q drinks. It uses the smallest item that fills the gap, or the biggest if none do. Nothing happens (with a toast) if you have none or the bar is full.
+- Restore values: canned beans 35, crackers 15, water bottle 40. This is data on the item (restores in src/data/items.ts).
+- An empty bar does NOT kill you yet. It only slows walking to 60 percent. No health, damage or death exists. That is a bigger design question left for Chris.
+- HUD: two thin bars at the bottom left; a bar turns red-orange under 25.
+- The bars do not drain during the performance run (B).
+
+Tests: 7 survival tests and 1 HUD test added. All pass.
+
+Known, not caused by this work: the cannon-es "drives over the ramp" test in tests/physics-lab.test.ts fails on the clean checkout too (the comparison engine, not the Rapier one the game uses).

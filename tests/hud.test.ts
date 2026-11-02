@@ -66,6 +66,17 @@ describe('hud', () => {
     expect(q('.hud-speed-value').textContent).toBe('63');
   });
 
+  it('shows hunger and thirst bars and flags a low one', () => {
+    const { hud } = setup();
+    hud.setNeeds({ hunger: 80, thirst: 10 });
+    const fills = document.querySelectorAll<HTMLElement>('.hud-need-fill');
+    expect(fills[0].style.width).toBe('80%');
+    expect(fills[1].style.width).toBe('10%');
+    const rows = document.querySelectorAll('.hud-need');
+    expect(rows[0].classList.contains('low')).toBe(false);
+    expect(rows[1].classList.contains('low')).toBe(true);
+  });
+
   it('shows and hides the debug readout', () => {
     const { hud, q } = setup();
     hud.setDebug('144 fps');

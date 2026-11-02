@@ -65,8 +65,8 @@
 
 #### Feature 1.3 — Survival
 **Progress:** 0%
-- [ ] Hunger and thirst
-- [ ] Eating and drinking items
+- [x] Hunger and thirst (first version, placeholder numbers; nothing lethal yet)
+- [x] Eating and drinking items (F eat, Q drink)
 
 #### Feature 1.4 — World
 **Progress:** 0%

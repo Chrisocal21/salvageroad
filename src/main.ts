@@ -12,6 +12,8 @@ import { createHud } from './ui/hud';
 import type { Box2, Obb2 } from './rules/geometry';
 import { exitPosition, findTarget, type Target } from './rules/interaction';
 import { createInventory } from './rules/inventory';
+import { ITEMS } from './data/items';
+import { consume, createSurvival, isWeak, stepSurvival, SURVIVAL } from './rules/survival';
 import { describeStacks, newContainerState, openContainer } from './rules/loot';
 import { summarizeFrames } from './rules/perfStats';
 import { PROP_COLLIDER, scatterProps } from './rules/scatter';
@@ -158,6 +160,7 @@ let mode: Mode = 'walking';
 const walker: Walker = { x: town.playerSpawn.x, z: town.playerSpawn.z, yaw: town.playerSpawn.yaw, pitch: 0 };
 const inventory = createInventory();
 hud.setInventory(inventory);
+const survival = createSurvival();
 const containerStates = new Map(town.containers.map((c) => [c.id, newContainerState(c.kind)]));
 function say(text: string) {
   hud.toast(text);
@@ -301,6 +304,16 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Tab' || e.code === 'KeyI') hud.toggleInventory();
   if (e.code === 'KeyR') void reset('town');
   if (e.code === 'KeyE') interact();
+  if (e.code === 'KeyF' || e.code === 'KeyQ') {
+    const kind = e.code === 'KeyF' ? 'food' : 'drink';
+    const r = consume(survival, inventory, kind);
+    if (r.ok) {
+      say(`${kind === 'food' ? 'Ate' : 'Drank'} ${ITEMS[r.itemId].name}`);
+      hud.setInventory(inventory);
+    } else {
+      say(r.reason === 'full' ? (kind === 'food' ? 'Not hungry' : 'Not thirsty') : kind === 'food' ? 'Nothing to eat' : 'Nothing to drink');
+    }
+  }
   if (e.code === 'KeyX') benchPanel.style.display = 'none';
   if (e.code === 'KeyB') {
     if (bench.active) {
@@ -358,9 +371,12 @@ renderer.setAnimationLoop((now) => {
     wheel.quaternion.slerpQuaternions(prev.wheelQuat[i], curr.wheelQuat[i], alpha);
   });
 
+  if (!bench.active) stepSurvival(survival, dt);
+  hud.setNeeds(survival);
+
   if (mode === 'walking') {
     // First person: walk, then look through the player's eyes.
-    stepWalker(walker, readWalkInput(), dt, walkSolids, [truckObb()]);
+    stepWalker(walker, { ...readWalkInput(), speedScale: isWeak(survival) ? SURVIVAL.weakSpeedScale : 1 }, dt, walkSolids, [truckObb()]);
     currentTarget = findTarget(walker, { containers: town.containers, truck: truckObb() });
     const groundY = terrainHeight(TERRAIN.seed, walker.x, walker.z);
     camera.position.set(walker.x, groundY + WALKER.eyeHeight, walker.z);
@@ -436,8 +452,8 @@ renderer.setAnimationLoop((now) => {
     hud.setPrompt(prompt);
     hud.setHint(
       mode === 'walking'
-        ? 'W/A/S/D walk   Shift run   E use   Tab carrying   R reset   B performance run   Click the page to look around, Esc to release'
-        : 'W gas   S brake/reverse   A/D steer   Space handbrake   E get out   Tab carrying   R reset   B performance run',
+        ? 'W/A/S/D walk   Shift run   E use   F eat   Q drink   Tab carrying   R reset   B performance run   Click the page to look around, Esc to release'
+        : 'W gas   S brake/reverse   A/D steer   Space handbrake   E get out   F eat   Q drink   Tab carrying   R reset   B performance run',
     );
     hud.setDebug(liveText);
   }
