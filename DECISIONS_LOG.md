@@ -129,3 +129,12 @@ Measured without a browser (Node, this laptop), physics and generation only:
 - Reading: the 144 Hz screen caps the frame rate, so this only shows the game is AT LEAST that fast. Three identical results is suspicious: either there is a lot of headroom, or the extra-pixels setting did not take effect. The report did not show the real drawing size, so this could not be told apart.
 - Follow-up made: the report now prints the actual drawing resolution for each phase, and a 9x pixels phase was added (the run is now 48 s). Re-run needed. A second run with ?objects=3000 would show how the scene scales with more props.
 - Not yet a conclusion: how this compares to a weaker mid-range laptop. Until the headroom is shown, the safe statement is "no problem found at 300 props on this machine".
+
+### Stage 5 second result (Chris's laptop, still 300 props, run with the new report)
+
+- The extra-pixels setting DOES work: the drawing size was 1920x991 (normal), 2880x1486 (2.25x), 3840x1982 (4x) and 5760x2973 (9x).
+- Normal, 2.25x and 4x pixels: 143.8 fps, 1 percent low 140.8, 0 hitches. At 4x that is 7.6 million pixels per frame held at 144 fps.
+- 9x pixels (17.1 million pixels per frame): 80.8 fps average, 1 percent low 47.6 fps, worst frame 41.7 ms, 76 hitches over 20 ms. CPU was only 0.7 ms per frame, so this is the GPU running out, not the code.
+- Reading: on this integrated Radeon the scene tops out at roughly 1.4 billion pixels per second. A normal 1080p frame at 144 fps needs about 0.27 billion, so there is roughly 5x spare GPU room at 144 fps and about 12x at 60 fps. In other words a GPU about 4-5x weaker than this one should still hold 144 fps at 1080p, and a much weaker one should still hold 60.
+- Caveats: this is only the pixel-filling cost of a plain, unlit-ish scene with no shadows, textures or effects. Real art, shadows, grass, weather and a town will use much of that room, so the spare 5x is an upper bound on what the game can spend, not a promise. A higher-resolution laptop screen (pixel ratio above 1) costs more per frame.
+- This run was still 300 props (the URL option ?objects=3000 was not used), so scaling with prop count is still unmeasured on the real GPU. The Node physics numbers (0.35 ms per step at 3,000 props) suggest physics is not the limit.
