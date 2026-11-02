@@ -47,9 +47,7 @@ describe.each(engines)('%s car', (name, make) => {
       trace.push(`${s}s z=${p[2].toFixed(1)} y=${p[1].toFixed(2)} v=${sim.speed().toFixed(1)}`);
     }
     console.log(name, 'ramp trace:\n  ' + trace.join('\n  '));
-    // Known gap: cannon-es stalls on this ramp (z about 4) with every tuning tried.
-    // See DECISIONS_LOG.md. Only Rapier is asserted until that is understood.
-    if (name === 'rapier') expect(sim.chassis().position[2]).toBeGreaterThan(8);
+    expect(sim.chassis().position[2]).toBeGreaterThan(8);
   });
 
   it('step cost stays small', async () => {

@@ -11,8 +11,12 @@ export function createCannonSim(tuning: CannonTuning = {}): CarSim {
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.81, 0) });
   world.defaultContactMaterial.friction = 0.4;
 
-  const ground = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
-  ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+  // A big box, not a Plane: wheel rays against an infinite Plane made the car stall.
+  const ground = new CANNON.Body({
+    mass: 0,
+    shape: new CANNON.Box(new CANNON.Vec3(500, 0.5, 500)),
+    position: new CANNON.Vec3(0, -0.5, 0),
+  });
   world.addBody(ground);
 
   const ramp = new CANNON.Body({
