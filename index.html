@@ -7,21 +7,14 @@
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #111; }
       canvas { display: block; }
-      /* Temporary debug readout. Canvas or HTML for the real HUD is still an open question. */
-      #hud {
-        position: fixed; top: 8px; left: 8px; color: #fff;
-        font: 13px/1.4 monospace; background: rgba(0,0,0,0.55); padding: 6px 10px;
-        white-space: pre; pointer-events: none;
-      }
       #bench {
         display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
         color: #fff; font: 14px/1.5 monospace; background: rgba(0,0,0,0.85); padding: 16px 22px;
-        white-space: pre; border-radius: 6px; max-width: 95vw; overflow: auto;
+        white-space: pre; border-radius: 6px; max-width: 95vw; overflow: auto; z-index: 10;
       }
     </style>
   </head>
   <body>
-    <div id="hud"></div>
     <div id="bench"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

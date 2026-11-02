@@ -159,3 +159,20 @@ Tests added: inventory, loot (reproducible, within the table, dumpsters mostly s
 Found while doing this: src/render/elCajon.ts was changed on disk by someone other than Claude (a much more detailed truck model). Claude did not touch it and did not commit it.
 
 Not verified: how any of this looks or feels in a browser. First-person direction conventions (yaw, mouse left and right) are covered by tests, but not yet seen on screen.
+
+## 2026-11-02 HUD decision and first real HUD
+
+Decided by Chris: the HUD and menus are built as HTML on top of the canvas (Claude recommended it: faster to build and change; it can be swapped later). This closes the open question "canvas or HTML for the game interface".
+
+Built (src/ui/hud.ts and hud.css), behind a small interface so the game code never touches page elements directly. Swapping to a canvas HUD later would mean rewriting only that one file:
+- Crosshair dot while on foot.
+- Interaction prompt with a key cap, for example [E] Open the crate, [E] Get in the El Cajon, [E] Get out.
+- Toast message that fades after 4 s ("Took 2 canned beans", "Inventory full", "Empty", "Slow down to get out").
+- Inventory panel on Tab or I: a 3 by 4 grid of the 12 slots with item names and counts, and "n of 12" used. Display only for now; you cannot drop, use or move items yet.
+- Speedometer (km/h) while driving.
+- Small controls reminder at the bottom left, and the fps/debug readout at the top left (still shown; not part of the real HUD).
+- Style: muted dark panels, light text, one warm accent colour, system font. Placeholder look, not a design.
+
+Claude's choices that Chris did not specify: Tab and I as the inventory keys, the position and style of everything above, and the 4 s toast time.
+
+Tests: 5 HUD tests run in a simulated browser page (jsdom was added as a dev dependency). The HUD has NOT been seen in a real browser yet.

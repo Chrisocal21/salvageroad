@@ -7,9 +7,10 @@ import { createElCajon } from './render/elCajon';
 import { createProps } from './render/props';
 import { createTerrainMesh } from './render/terrainMesh';
 import { createTownView } from './render/town';
+import { createHud } from './ui/hud';
 import type { Box2, Obb2 } from './rules/geometry';
 import { exitPosition, findTarget, type Target } from './rules/interaction';
-import { createInventory, describeInventory, INVENTORY_SLOTS, usedSlots } from './rules/inventory';
+import { createInventory } from './rules/inventory';
 import { describeStacks, newContainerState, openContainer } from './rules/loot';
 import { summarizeFrames } from './rules/perfStats';
 import { PROP_COLLIDER, scatterProps } from './rules/scatter';
@@ -28,7 +29,7 @@ const STEP = 1 / 60; // physics always runs at a fixed 60 steps per second
 const params = new URLSearchParams(location.search);
 const propCount = Math.max(0, Number(params.get('objects') ?? 300) | 0);
 
-const hud = document.getElementById('hud') as HTMLElement;
+const hud = createHud(document.body);
 const benchPanel = document.getElementById('bench') as HTMLElement;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -129,12 +130,10 @@ type Mode = 'walking' | 'driving';
 let mode: Mode = 'walking';
 const walker: Walker = { x: town.playerSpawn.x, z: town.playerSpawn.z, yaw: town.playerSpawn.yaw, pitch: 0 };
 const inventory = createInventory();
+hud.setInventory(inventory);
 const containerStates = new Map(town.containers.map((c) => [c.id, newContainerState(c.kind)]));
-let message = '';
-let messageUntil = 0;
 function say(text: string) {
-  message = text;
-  messageUntil = performance.now() + 5000;
+  hud.toast(text);
 }
 const PARKED: DriveInput = { throttle: 0, steer: 0, brake: 1 }; // handbrake on while you are out of the truck
 
@@ -251,6 +250,7 @@ function interact() {
   } else {
     say('Empty');
   }
+  hud.setInventory(inventory);
   if (!result.leftBehind) townView.markOpened(target.id);
 }
 
@@ -269,7 +269,9 @@ const bench = new Bench(
   () => `${renderer.domElement.width}x${renderer.domElement.height}`,
 );
 window.addEventListener('keydown', (e) => {
+  if (e.code === 'Tab') e.preventDefault(); // Tab would otherwise move the page focus
   if (e.repeat) return;
+  if (e.code === 'Tab' || e.code === 'KeyI') hud.toggleInventory();
   if (e.code === 'KeyR') void reset('town');
   if (e.code === 'KeyE') interact();
   if (e.code === 'KeyX') benchPanel.style.display = 'none';
@@ -383,33 +385,33 @@ renderer.setAnimationLoop((now) => {
     const s = summarizeFrames(recent);
     liveText = `${s.avgFps.toFixed(0)} fps   1% low ${s.onePercentLowFps.toFixed(0)}   cpu ${cpuMs.toFixed(1)} ms   draws ${renderer.info.render.calls}`;
   }
-  const lines: string[] = [];
-  lines.push(`${(Math.abs(sim.speed()) * 3.6).toFixed(0)} km/h   ${liveText}`);
+  hud.setMode(mode);
+  hud.setSpeed(Math.abs(sim.speed()) * 3.6);
   if (bench.active) {
-    lines.push(`PERFORMANCE RUN: ${bench.phaseName()}, ${bench.remaining(now).toFixed(0)} s left (B cancels)`);
+    hud.setPrompt(null);
+    hud.setHint('');
+    hud.setDebug(`${liveText}\nPERFORMANCE RUN: ${bench.phaseName()}, ${bench.remaining(now).toFixed(0)} s left (B cancels)`);
   } else {
-    // Temporary debug text. The real HUD (canvas or HTML) is still an open question for Chris.
+    let prompt: { key: string; text: string } | null = null;
     if (mode === 'walking' && currentTarget) {
       if (currentTarget.kind === 'truck') {
-        lines.push('E: get in the El Cajon');
+        prompt = { key: 'E', text: 'Get in the El Cajon' };
       } else {
         const state = containerStates.get(currentTarget.id);
         const name = CONTAINERS[town.containers[currentTarget.id].kind].name;
-        lines.push(state?.opened ? `E: take the rest from the ${name}` : `E: open the ${name}`);
+        prompt = { key: 'E', text: state?.opened ? `Take the rest from the ${name}` : `Open the ${name}` };
       }
     } else if (mode === 'driving' && Math.abs(sim.speed()) <= 3) {
-      lines.push('E: get out');
+      prompt = { key: 'E', text: 'Get out' };
     }
-    if (now < messageUntil) lines.push(message);
-    lines.push(`Carrying (${usedSlots(inventory)}/${INVENTORY_SLOTS} slots): ${describeInventory(inventory)}`);
-    lines.push(
+    hud.setPrompt(prompt);
+    hud.setHint(
       mode === 'walking'
-        ? 'W/A/S/D walk  Shift run  E use  R reset  B performance run'
-        : 'W gas  S brake/reverse  A/D steer  Space handbrake  E get out  R reset  B performance run',
+        ? 'W/A/S/D walk   Shift run   E use   Tab carrying   R reset   B performance run   Click the page to look around, Esc to release'
+        : 'W gas   S brake/reverse   A/D steer   Space handbrake   E get out   Tab carrying   R reset   B performance run',
     );
-    lines.push('Click the page to look around with the mouse, Esc to release');
+    hud.setDebug(liveText);
   }
-  hud.textContent = lines.join('\n');
 });
 
 window.addEventListener('resize', () => {
