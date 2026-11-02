@@ -5,11 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Salvage Road</title>
     <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #111; }
-      canvas { display: block; }
+      html, body { margin: 0; height: 100%; background: #111; color: #eee; font: 18px/1.6 sans-serif; }
+      main { max-width: 480px; margin: 12vh auto; padding: 0 16px; }
+      a { display: block; margin: 12px 0; padding: 14px 18px; background: #2a3a2a; color: #fff; text-decoration: none; border-radius: 6px; }
+      a:hover { background: #3a523a; }
+      small { color: #999; }
     </style>
   </head>
   <body>
-    <script type="module" src="/src/main.ts"></script>
+    <main>
+      <h1>Salvage Road</h1>
+      <p>Step Zero: physics test. Pick an engine and drive.</p>
+      <a href="/lab/index.html?engine=rapier">Drive with Rapier</a>
+      <a href="/lab/index.html?engine=cannon">Drive with cannon-es</a>
+      <small>W/S gas and reverse, A/D steer, Space brake, R reset</small>
+    </main>
   </body>
 </html>
