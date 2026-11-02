@@ -24,7 +24,7 @@ export function makeRandom(seed: number): () => number {
 
 /**
  * Scatters props across a square area centred on the origin.
- * Nothing lands within `clearRadius` of the origin or within `edgeMargin` of the edge.
+ * Nothing lands within `clearRadius` of the origin, inside a clear zone, or within `edgeMargin` of the edge.
  */
 export function scatterProps(
   seed: number,
@@ -32,6 +32,7 @@ export function scatterProps(
   size: number,
   clearRadius: number,
   edgeMargin = 12,
+  clearZones: { x: number; z: number; r: number }[] = [],
 ): Prop[] {
   const rand = makeRandom(seed);
   const half = size / 2 - edgeMargin;
@@ -40,6 +41,7 @@ export function scatterProps(
     const x = (rand() * 2 - 1) * half;
     const z = (rand() * 2 - 1) * half;
     if (Math.hypot(x, z) < clearRadius) continue;
+    if (clearZones.some((zone) => Math.hypot(x - zone.x, z - zone.z) < zone.r)) continue;
     const pick = rand();
     const kind: PropKind = pick < 0.6 ? 'tree' : pick < 0.85 ? 'crate' : 'rock';
     const scale = kind === 'tree' ? 0.8 + rand() * 0.8 : 0.7 + rand() * 0.7;

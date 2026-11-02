@@ -39,3 +39,22 @@ describe('physics ground matches the visible terrain', () => {
     expect(sim.chassis().position[1]).toBeGreaterThan(-5);
   });
 });
+
+describe('town in the physics world', () => {
+  it('parks the truck where the town says, facing the way it says, and a building stops it', async () => {
+    const grid = buildTerrainGrid();
+    const sim = await createRapierSim({
+      terrain: grid,
+      carSpawn: { x: 0, z: 58, yaw: Math.PI / 2 }, // facing +X
+      boxes: [{ x: 30, z: 58, hx: 4, hz: 10, height: 5 }], // a wall 26 m ahead of the nose
+    });
+    for (let i = 0; i < 60; i++) sim.step(1 / 60, { throttle: 0, steer: 0, brake: 0 });
+    const parked = sim.chassis().position;
+    expect(parked[0]).toBeCloseTo(0, 0);
+    expect(parked[2]).toBeCloseTo(58, 0);
+    for (let i = 0; i < 60 * 10; i++) sim.step(1 / 60, { throttle: 1, steer: 0, brake: 0 });
+    const end = sim.chassis().position;
+    expect(end[0]).toBeGreaterThan(15); // it drove in the +X direction
+    expect(end[0]).toBeLessThan(30 - 4); // and did not pass through the wall
+  });
+});

@@ -10,6 +10,10 @@ type Quat = [number, number, number, number]; // x, y, z, w
 export interface WorldSpec {
   terrain?: TerrainGrid;
   props?: Prop[];
+  /** Solid boxes standing on the ground, such as buildings and containers. height is full height. */
+  boxes?: { x: number; z: number; hx: number; hz: number; height: number }[];
+  /** Where the truck starts. Defaults to the lab spawn point. */
+  carSpawn?: { x: number; z: number; yaw: number };
 }
 
 /** Rapier's heightfield, built from the same grid the visible terrain mesh uses. */
@@ -56,9 +60,23 @@ export async function createRapierSim(spec: WorldSpec = {}): Promise<CarSim> {
       .setRotation({ x: Math.sin(half), y: 0, z: 0, w: Math.cos(half) }),
   );
 
+  for (const b of spec.boxes ?? []) {
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(b.hx, b.height / 2, b.hz).setTranslation(
+        b.x,
+        terrainHeight(seed, b.x, b.z) + b.height / 2,
+        b.z,
+      ),
+    );
+  }
+
+  const spawn = spec.carSpawn
+    ? { x: spec.carSpawn.x, y: terrainHeight(seed, spec.carSpawn.x, spec.carSpawn.z) + 1, z: spec.carSpawn.z, yaw: spec.carSpawn.yaw }
+    : { x: CAR.spawn[0], y: CAR.spawn[1], z: CAR.spawn[2], yaw: 0 };
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(...CAR.spawn)
+      .setTranslation(spawn.x, spawn.y, spawn.z)
+      .setRotation({ x: 0, y: Math.sin(spawn.yaw / 2), z: 0, w: Math.cos(spawn.yaw / 2) })
       .setAngularDamping(0.4)
       .setCanSleep(false),
   );

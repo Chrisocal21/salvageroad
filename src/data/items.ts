@@ -1,0 +1,23 @@
+// Content as data: every item in the game is a row here. Adding an item never needs new code.
+
+export type ItemKind = 'food' | 'drink' | 'material' | 'tool' | 'medical';
+
+export interface ItemDef {
+  id: string;
+  name: string;
+  kind: ItemKind;
+  /** How many fit in one inventory slot. */
+  stack: number;
+}
+
+export const ITEMS: Record<string, ItemDef> = {
+  canned_beans: { id: 'canned_beans', name: 'canned beans', kind: 'food', stack: 6 },
+  crackers: { id: 'crackers', name: 'crackers', kind: 'food', stack: 6 },
+  water_bottle: { id: 'water_bottle', name: 'water bottle', kind: 'drink', stack: 4 },
+  scrap_metal: { id: 'scrap_metal', name: 'scrap metal', kind: 'material', stack: 20 },
+  duct_tape: { id: 'duct_tape', name: 'duct tape', kind: 'material', stack: 5 },
+  rope: { id: 'rope', name: 'rope', kind: 'material', stack: 5 },
+  batteries: { id: 'batteries', name: 'batteries', kind: 'material', stack: 8 },
+  wrench: { id: 'wrench', name: 'wrench', kind: 'tool', stack: 1 },
+  bandage: { id: 'bandage', name: 'bandage', kind: 'medical', stack: 5 },
+};

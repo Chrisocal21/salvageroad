@@ -9,7 +9,11 @@ export interface TerrainSpec {
 
 export const TERRAIN: TerrainSpec = { seed: 1, size: 400, cells: 200 };
 
-const FLAT_RADIUS = 60; // m around the origin that stay perfectly flat (spawn and test ramp)
+/** Circles of ground that stay perfectly flat: the test field at the origin and the town. */
+export const FLAT_ZONES = [
+  { x: 0, z: 0, r: 60 },
+  { x: 0, z: 100, r: 70 },
+];
 const FLAT_BLEND = 50; // m over which the hills fade in
 const AMPLITUDE = 7; // m, roughly the tallest hill
 const WAVELENGTH = 70; // m of the largest hills
@@ -57,8 +61,9 @@ function fbm(seed: number, x: number, z: number): number {
 
 /** Ground height in metres at a world position. */
 export function terrainHeight(seed: number, x: number, z: number): number {
-  const d = Math.hypot(x, z);
-  const t = Math.min(1, Math.max(0, (d - FLAT_RADIUS) / FLAT_BLEND));
+  let outside = Infinity; // metres beyond the nearest flat zone
+  for (const zone of FLAT_ZONES) outside = Math.min(outside, Math.hypot(x - zone.x, z - zone.z) - zone.r);
+  const t = Math.min(1, Math.max(0, outside / FLAT_BLEND));
   return fbm(seed, x / WAVELENGTH, z / WAVELENGTH) * AMPLITUDE * smooth(t);
 }
 

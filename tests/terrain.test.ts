@@ -15,6 +15,12 @@ describe('terrain', () => {
     }
   });
 
+  it('is flat across the whole town area', () => {
+    for (const [x, z] of [[0, 100], [-45, 58], [45, 142], [40, 60], [-40, 140]]) {
+      expect(terrainHeight(1, x, z)).toBeCloseTo(0, 6);
+    }
+  });
+
   it('has hills further out, within a sane height range', () => {
     let min = 0;
     let max = 0;
@@ -52,6 +58,8 @@ describe('scatter', () => {
     const a = scatterProps(5, 300, 400, 45);
     const b = scatterProps(5, 300, 400, 45);
     expect(a).toEqual(b);
+    const zoned = scatterProps(5, 300, 400, 45, 12, [{ x: 0, z: 100, r: 70 }]);
+    for (const p of zoned) expect(Math.hypot(p.x, p.z - 100)).toBeGreaterThanOrEqual(70);
     expect(a).toHaveLength(300);
     for (const p of a) {
       expect(Math.hypot(p.x, p.z)).toBeGreaterThanOrEqual(45);

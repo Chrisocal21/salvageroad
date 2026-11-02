@@ -138,3 +138,24 @@ Measured without a browser (Node, this laptop), physics and generation only:
 - Reading: on this integrated Radeon the scene tops out at roughly 1.4 billion pixels per second. A normal 1080p frame at 144 fps needs about 0.27 billion, so there is roughly 5x spare GPU room at 144 fps and about 12x at 60 fps. In other words a GPU about 4-5x weaker than this one should still hold 144 fps at 1080p, and a much weaker one should still hold 60.
 - Caveats: this is only the pixel-filling cost of a plain, unlit-ish scene with no shadows, textures or effects. Real art, shadows, grass, weather and a town will use much of that room, so the spare 5x is an upper bound on what the game can spend, not a promise. A higher-resolution laptop screen (pixel ratio above 1) costs more per frame.
 - This run was still 300 props (the URL option ?objects=3000 was not used), so scaling with prop count is still unmeasured on the real GPU. The Node physics numbers (0.35 ms per step at 3,000 props) suggest physics is not the limit.
+
+## 2026-11-02 Stage 6: town, first-person walking, looting, enter and exit the truck (built, not yet seen in a browser)
+
+Chris approved moving on to the town, first-person walking, looting containers, carrying items, and entering and exiting the vehicle.
+
+Decided by Claude (Chris did not specify):
+- The town is a seeded 3 by 3 grid of lots (28 m) with 9 m streets, centred at (0, 100), about 84 m across. Roughly 85 percent of lots get a building (boxes, 9 to 15 m wide, 3.5 to 7 m tall). Buildings are solid boxes you cannot enter yet; interiors are a later job. src/rules/town.ts.
+- Each building gets 1 to 3 containers against its walls. Four kinds, as data in src/data/containers.ts: crate (food, water, rope, scrap), locker (bandages, batteries, water, a rare wrench), dumpster (mostly scrap), toolbox (wrench, tape, scrap, batteries). Items are data in src/data/items.ts (9 items). Contents are rolled the first time a container is opened and are the same every run for the same seed.
+- The terrain now has two flat zones: the old test field at the origin and the town, so the town sits on level ground.
+- Start: you spawn on foot 22 m south of the town's first street. The El Cajon is parked on that street, 20 m west of the town centre, facing east. The old ramp and grid stay at the origin as a test field.
+- Inventory: 12 slots, each one kind of item, stacks as listed per item. If it is full, what does not fit stays in the container.
+- Walking: a circle that slides along walls, boxes, trees, rocks and the parked truck, plain geometry (not the physics engine). Walk 3.2 m/s, run (Shift) 6 m/s. First-person eye height 1.7 m. Mouse look uses the same click-to-capture as driving.
+- E uses what you are close to (within 2.2 m) and roughly facing, or anything you are touching. E on the truck gets in. E while driving gets out, only below 3 m/s, on the driver's (left) side. The truck is held by the handbrake while you are out.
+- The performance run (B) puts the truck back on the open test field, so its numbers stay comparable with the earlier runs. R puts you and the truck back at the town. Looted containers stay looted after R.
+- The on-screen text for prompts ("E: open the crate"), messages and the carried-items line is added to the existing temporary debug readout. It is NOT a real HUD or inventory screen: no crosshair, no menus. The HTML-versus-canvas question is still open and nothing beyond that text was built.
+
+Tests added: inventory, loot (reproducible, within the table, dumpsters mostly scrap), town (reproducible, buildings off the streets and apart, containers out of walls), walking, interaction, and a check that for five different town seeds every container can be reached on foot from the start. Also the physics world holds the town boxes and parks the truck where the town says.
+
+Found while doing this: src/render/elCajon.ts was changed on disk by someone other than Claude (a much more detailed truck model). Claude did not touch it and did not commit it.
+
+Not verified: how any of this looks or feels in a browser. First-person direction conventions (yaw, mouse left and right) are covered by tests, but not yet seen on screen.
