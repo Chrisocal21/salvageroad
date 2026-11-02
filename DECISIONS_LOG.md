@@ -18,7 +18,7 @@ Decided by Claude (Chris did not specify):
 
 Open questions (from docs/ROADSURVIVAL_OPEN_QUESTIONS.md, relevant to Step Zero):
 - Driving camera: cockpit, chase, or switchable
-- Keyboard layout, and whether gamepad matters
+- Keyboard layout: DECIDED by Chris, WASD to drive and Space to brake (arrow keys also work in the lab). Gamepad still open.
 - HUD and menus: canvas or HTML
 - How heavy and arcade-like driving should feel
 - Art budget
