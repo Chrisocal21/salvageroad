@@ -85,3 +85,14 @@ Chris reported everything shaking at top speed, like a whoop section. This was t
 - Cause 1: physics runs at a fixed 60 steps/s but Chris's screen draws 144 fps. The car was drawn at its latest physics position, so on most frames it did not move and then jumped about 0.7 m at 40 m/s. Fix: each frame draws the car at a blend (interpolation) between the last two physics states.
 - Cause 2: the camera followed with a per-frame lerp (0.12), which depends on frame rate and lags more at speed, amplifying the stutter. Fix: the camera is now rigidly attached behind the car; only its heading (6 per second) and height (8 per second) are smoothed, using time-based smoothing that does not depend on frame rate.
 - Not verified in a browser. If shaking remains, the next suspects are the 1000 m grid lines flickering (aliasing) and the physics ground contact, in that order.
+
+### Update: "tires turning and the shocks need to be a bit better"
+
+Chris said the truck's tyres turning and shocks need to be a bit better after the shaking fix. The wording is general, so I measured the body motion instead of guessing:
+- Before: hard braking from 80 km/h tipped the body only 1.2 degrees, cornering rolled it 0.4 degrees, launch squat 0.7 degrees. A real car does roughly 2-4 degrees. The suspension looked dead and the truck looked glued flat. The cause was a very low centre of mass (at wheel-mount height) plus a stiff, heavily damped spring.
+- Changes (all in src/lab/types.ts): centre of mass raised 0.35 m above the chassis centre, spring stiffness 30 to 14, suspension travel 0.3 to 0.45 m, damping 4/5 to 2.5/3.5.
+- After: braking dive 3.8 degrees, cornering roll about 1.5 degrees, no bottoming out (belly stays about 0.2 m off the ground), settles after a 1.6 m drop in under 1 s. Softer springs than this bottomed out on drops, which is why I stopped here.
+- Wheel visuals: wheels now hang along the car's own down direction, so they follow the body when it leans, instead of straight down in world space.
+- A regression test (dive 1.5 to 6 degrees, belly stays off the ground) guards this.
+- Steering and wheel spin visuals were checked by reasoning (front wheels yaw with the steering, spin turns forward when driving forward) but not seen in a browser. If "tires turning" meant something specific that looks wrong, that is still open.
+- Side effect: with the softer setup the ramp launch is a little gentler.

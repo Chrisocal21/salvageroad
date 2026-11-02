@@ -44,6 +44,27 @@ describe.each(engines)('%s car', (name, make) => {
     if (name === 'rapier') expect(unsettled).toBeLessThan(1.5);
   });
 
+  it('dives a few degrees under hard braking, without bottoming out', async () => {
+    if (name !== 'rapier') return; // only Rapier has the tuned suspension
+    const sim = await make();
+    run(sim, 2, 0);
+    run(sim, 1, 1, -1); // turn away from the ramp
+    while (sim.speed() < 22) sim.step(DT, { throttle: 1, steer: 0, brake: 0 });
+    let maxPitch = 0;
+    let lowest = 9;
+    for (let i = 0; i < 90; i++) {
+      sim.step(DT, { throttle: -1, steer: 0, brake: 0 });
+      const [x, y, z, w] = sim.chassis().quaternion;
+      maxPitch = Math.max(maxPitch, Math.abs(Math.asin(2 * (y * z - w * x))));
+      lowest = Math.min(lowest, sim.chassis().position[1]);
+    }
+    const deg = (maxPitch * 180) / Math.PI;
+    console.log(name, `braking dive ${deg.toFixed(1)} deg, lowest ${lowest.toFixed(2)} m`);
+    expect(deg).toBeGreaterThan(1.5); // a real car does not stay perfectly level
+    expect(deg).toBeLessThan(6);
+    expect(lowest).toBeGreaterThan(0.45); // chassis belly stays off the ground
+  });
+
   it('turns when steered', async () => {
     const sim = await make();
     run(sim, 2, 0);

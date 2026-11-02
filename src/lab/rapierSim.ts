@@ -24,7 +24,18 @@ export async function createRapierSim(): Promise<CarSim> {
       .setAngularDamping(0.4)
       .setCanSleep(false),
   );
-  world.createCollider(RAPIER.ColliderDesc.cuboid(...CAR.halfExtents).setMass(CAR.mass), body);
+  // A solid box with the same mass, but with the centre of mass moved up so the body can lean.
+  const [hx, hy, hz] = CAR.halfExtents;
+  const m = CAR.mass / 3;
+  world.createCollider(
+    RAPIER.ColliderDesc.cuboid(hx, hy, hz).setMassProperties(
+      CAR.mass,
+      { x: 0, y: CAR.centerOfMassY, z: 0 },
+      { x: m * (hy * hy + hz * hz), y: m * (hx * hx + hz * hz), z: m * (hx * hx + hy * hy) },
+      { x: 0, y: 0, z: 0, w: 1 },
+    ),
+    body,
+  );
 
   const vehicle = world.createVehicleController(body);
   vehicle.indexUpAxis = 1;
@@ -48,7 +59,7 @@ export async function createRapierSim(): Promise<CarSim> {
     vehicle.setWheelSuspensionStiffness(i, CAR.suspensionStiffness);
     vehicle.setWheelSuspensionCompression(i, CAR.suspensionCompression);
     vehicle.setWheelSuspensionRelaxation(i, CAR.suspensionRelaxation);
-    vehicle.setWheelMaxSuspensionTravel(i, 0.3);
+    vehicle.setWheelMaxSuspensionTravel(i, CAR.suspensionTravel);
     vehicle.setWheelFrictionSlip(i, 1.4);
     vehicle.setWheelMaxSuspensionForce(i, 100000);
   });
@@ -106,8 +117,19 @@ export async function createRapierSim(): Promise<CarSim> {
         const hard = vehicle.wheelHardPoint(i);
         const len = vehicle.wheelSuspensionLength(i) ?? CAR.suspensionRest;
         const t = body.translation();
-        // wheelHardPoint is in world space; the wheel hangs one suspension length below it.
-        const position: [number, number, number] = [hard?.x ?? t.x, (hard?.y ?? t.y) - len, hard?.z ?? t.z];
+        // wheelHardPoint is in world space. The wheel hangs one suspension length below it,
+        // along the car's own down direction, so it follows the body when the body leans.
+        const [qx, qy, qz, qw] = chassisQ;
+        const down: [number, number, number] = [
+          -2 * (qx * qy - qz * qw),
+          -(1 - 2 * (qx * qx + qz * qz)),
+          -2 * (qy * qz + qx * qw),
+        ];
+        const position: [number, number, number] = [
+          (hard?.x ?? t.x) + down[0] * len,
+          (hard?.y ?? t.y) + down[1] * len,
+          (hard?.z ?? t.z) + down[2] * len,
+        ];
         const steer = i < 2 ? -steerAngle : 0;
         const q = mul(mul(chassisQ, axisAngle(0, 1, 0, steer)), axisAngle(1, 0, 0, spin));
         return { position, quaternion: q };
