@@ -31,7 +31,7 @@ export const CAR = {
   suspensionRest: 0.35,
   spawn: [0, 1.6, -20] as const,
   maxEngineForce: 4500,
-  maxBrake: 60,
+  maxBrake: 50,
   maxSteer: 0.5,
 };
 

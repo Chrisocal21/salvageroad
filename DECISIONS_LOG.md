@@ -50,3 +50,24 @@ Chris reported: cannon-es feels smoother but stops randomly; Rapier does not tur
 - cannon-es ramp stall: still there. Same position (z about 4) after the ground fix, so it is a separate problem. Cause not found.
 - Rapier "does not turn enough": the headless measurement says NO difference. At 8, 15 and 25 m/s with full steer, both cars turn at the same rate (about 0.87, 0.68 and 0.45 rad/s). So the cause is probably the steering angle and speed, not the library. Turning gets weaker as speed rises because the steering angle is fixed at 0.5 rad. Both cars reach about 35 m/s with the throttle held. The fix is a tuning decision (more steering angle, or steering that eases in), which depends on how arcade Chris wants the driving to feel. This is the open question "how heavy and arcade-like".
 - Corrected leaning: the library choice is not clear-cut anymore. Both feel similar in physics. Rapier clears the ramp; cannon-es does not yet.
+
+## 2026-11-02 Stage 4: drivable El Cajon
+
+Decided by Chris:
+- Physics library: Rapier (cannon-es is no longer used for the game; the cannon-es lab stays at /lab for reference).
+- Driving feel: realistic, like a real car (not arcade).
+
+Decided by Claude (Chris did not specify), all in src/rules/driving.ts so they are easy to tune and are tested without a browser:
+- Engine: 5000 N grip limit at low speed, 60 kW power limit above that. Measured 0 to 100 km/h in about 11.6 s, top speed in the region of 130-150 km/h (drag-limited).
+- Air drag and rolling resistance applied as forces against travel.
+- Braking about 8.9 m/s2 from 100 km/h (stops in 3.1 s). Pressing the opposite pedal brakes first and only reverses once stopped. Reverse limited to 6 m/s.
+- Steering: wheel lock 0.55 rad when crawling, falling to half at 8 m/s, and eased in at 2.5 rad/s instead of snapping. Turn rate at speed is now lower on purpose.
+- Space is a handbrake (rear wheels only).
+- Physics runs at a fixed 60 steps/s with an accumulator, so feel does not depend on frame rate.
+- Camera: chase camera, PROVISIONAL. Chris has not chosen cockpit, chase or switchable.
+- The on-screen text (speed, fps, keys) is an HTML overlay used as a temporary debug readout. Canvas or HTML for the real HUD is still open.
+- The ramp from the lab is still in the scene, 20 m ahead of the spawn point, so the suspension can be tested. Easy to remove.
+- The ground is 1000 m square. Driving off the edge falls forever; falling below y=-20 resets the car.
+- Placeholder model: boxes only (src/render/elCajon.ts). Wheels steer and spin.
+
+Not verified: how it looks and feels in a browser. Only the numbers were measured headless.
