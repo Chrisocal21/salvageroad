@@ -22,3 +22,22 @@ Open questions (from docs/ROADSURVIVAL_OPEN_QUESTIONS.md, relevant to Step Zero)
 - HUD and menus: canvas or HTML
 - How heavy and arcade-like driving should feel
 - Art budget
+
+## 2026-11-02 Physics library comparison (stage 3)
+
+Setup: same car (1400 kg box chassis, 4 raycast wheels, rear-wheel drive), same flat ground, same ramp, same driving script, both libraries behind one small interface (src/lab/types.ts). Versions: @dimforge/rapier3d-compat 0.21.0, cannon-es 0.20.0. Both use a raycast vehicle model (wheels are rays, not physical cylinders).
+
+Measured headless in Node on the dev laptop (tests/physics-lab.test.ts):
+- Step cost: rapier about 0.03 ms/step, cannon-es about 0.03 ms/step. Both tiny for one car. This says nothing yet about a whole world; that is stage 5.
+- Settles at rest height 0.73 (rapier) and 0.75 (cannon-es). Both drive forward and steer.
+- Ramp: Rapier drives over it and keeps going. cannon-es stalls on the ramp at about z=4 with throttle held. Changing suspension stiffness (30/60/100), suspension travel (0.3/0.5) and wheel friction (1.4/3) made no difference. The car is upright and tilted with the ramp, so it is stuck, not flipped. Cause not found. It may be how the chassis box meets the ramp box in my scene, not a hard limit of the library.
+
+Quirks found:
+- cannon-es drives toward +Z with a NEGATIVE engine force; the adapter flips it.
+- Rapier steering needed a sign flip to match cannon-es.
+- Rapier's vehicle controller is in the compat build as DynamicRayCastVehicleController; its forward-axis setter is oddly named setIndexForwardAxis.
+- Rapier needs an async init (loads wasm) before use; cannon-es is plain JS.
+
+Not measured yet: how the cars FEEL (needs Chris), and browser frame rate. Both are available at /lab/index.html?engine=rapier and ?engine=cannon on localhost:3000.
+
+Leaning: Rapier, because it cleared the ramp without tuning and is actively maintained. Chris decides after driving both.
