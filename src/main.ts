@@ -154,6 +154,7 @@ const bench = new Bench(
     renderScale = scale;
     applySize();
   },
+  () => `${renderer.domElement.width}x${renderer.domElement.height}`,
 );
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;

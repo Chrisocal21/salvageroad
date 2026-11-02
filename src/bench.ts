@@ -15,6 +15,7 @@ export const BENCH_PHASES: BenchPhase[] = [
   { name: 'normal', seconds: 12, renderScale: 1 },
   { name: '2.25x pixels', seconds: 12, renderScale: 1.5 },
   { name: '4x pixels', seconds: 12, renderScale: 2 },
+  { name: '9x pixels', seconds: 12, renderScale: 3 },
 ];
 
 const WARMUP_SECONDS = 1.5; // dropped at the start of each phase: shader compile and resize hitches
@@ -22,6 +23,8 @@ const WARMUP_SECONDS = 1.5; // dropped at the start of each phase: shader compil
 export interface PhaseResult {
   name: string;
   renderScale: number;
+  /** Size of the image actually being drawn, to prove the extra-pixels setting took effect. */
+  resolution: string;
   summary: FrameSummary;
   avgCpuMs: number;
   avgPhysicsMs: number;
@@ -63,6 +66,7 @@ export class Bench {
   constructor(
     private context: BenchContext,
     private setRenderScale: (scale: number) => void,
+    private getResolution: () => string,
     private phases: BenchPhase[] = BENCH_PHASES,
   ) {}
 
@@ -119,6 +123,7 @@ export class Bench {
     this.results.push({
       name: p.name,
       renderScale: p.renderScale,
+      resolution: this.getResolution(),
       summary: summarizeFrames(this.frames),
       avgCpuMs: avg(this.cpu),
       avgPhysicsMs: avg(this.physics),
@@ -151,7 +156,7 @@ export function formatReport(r: BenchReport): string {
   for (const p of r.phases) {
     const s = p.summary;
     lines.push(
-      `${p.name}`,
+      `${p.name}  (drawing ${p.resolution})`,
       `  avg ${f1(s.avgFps)} fps (${f1(s.avgMs)} ms)   1% low ${f1(s.onePercentLowFps)} fps   worst ${f1(s.worstMs)} ms   hitches over 20 ms: ${s.hitches}`,
       `  CPU ${f1(p.avgCpuMs)} ms per frame (physics ${p.avgPhysicsMs.toFixed(2)} ms)   draw calls ${p.drawCalls}   triangles ${p.triangles}`,
     );

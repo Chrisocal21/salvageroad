@@ -120,3 +120,12 @@ Measured without a browser (Node, this laptop), physics and generation only:
 - Terrain generation 9 ms. World build with 300 props 17 ms.
 - Physics step average: 0.05 ms (no props), 0.07 ms (300 props), 0.14 ms (1,000), 0.35 ms (3,000). Worst single step about 2.5 ms at 3,000.
 - So physics is a small slice of a 16.7 ms frame (60 fps) even with 3,000 props. Rendering is what remains to be measured.
+
+### Stage 5 first result (Chris's laptop, 300 props)
+
+- GPU the browser used: ANGLE (AMD, AMD Radeon(TM) Graphics 0x00001681, Direct3D11). That is the INTEGRATED Radeon in the Ryzen, not the RX 6550M. Closer to a typical mid-range laptop, so a fairly conservative baseline. (Chrome can be pointed at the RX 6550M in Windows graphics settings if wanted; not done.)
+- Screen 1920x991, pixel ratio 1, 300 props, 24-25 draw calls, about 91,400 triangles.
+- Normal, 2.25x pixels and 4x pixels all gave 143.8 fps (7.0 ms), 1 percent low 140.8 fps, worst 7.6 ms, 0 hitches over 20 ms. CPU 0.4-0.5 ms per frame, physics 0.10-0.13 ms.
+- Reading: the 144 Hz screen caps the frame rate, so this only shows the game is AT LEAST that fast. Three identical results is suspicious: either there is a lot of headroom, or the extra-pixels setting did not take effect. The report did not show the real drawing size, so this could not be told apart.
+- Follow-up made: the report now prints the actual drawing resolution for each phase, and a 9x pixels phase was added (the run is now 48 s). Re-run needed. A second run with ?objects=3000 would show how the scene scales with more props.
+- Not yet a conclusion: how this compares to a weaker mid-range laptop. Until the headroom is shown, the safe statement is "no problem found at 300 props on this machine".
