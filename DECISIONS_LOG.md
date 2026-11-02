@@ -96,3 +96,27 @@ Chris said the truck's tyres turning and shocks need to be a bit better after th
 - A regression test (dive 1.5 to 6 degrees, belly stays off the ground) guards this.
 - Steering and wheel spin visuals were checked by reasoning (front wheels yaw with the steering, spin turns forward when driving forward) but not seen in a browser. If "tires turning" meant something specific that looks wrong, that is still open.
 - Side effect: with the softer setup the ramp launch is a little gentler.
+
+## 2026-11-02 Stage 5: performance baseline (built, graphics not yet measured)
+
+Chris said the driving is fine for now and to move on. The handoff's next stage is the performance baseline: generated terrain plus a few hundred placeholder objects, frame rate measured on the test laptop, no art.
+
+Decided by Claude (Chris did not specify):
+- Terrain: 400 m square, 200 x 200 cells (2 m spacing, 40,401 vertices), seeded noise (4 layers, hills up to about 7 m), flat within 60 m of the origin so the spawn and test ramp stay level. Seed 1. src/rules/terrain.ts.
+- The physics ground is a Rapier heightfield built from the same grid as the visible mesh. A test fires rays at it and checks the heights match the height function. Rapier's heightfield counts cells, not vertices (a first attempt crashed on that).
+- Props: 300 by default, seeded (seed 7), kept at least 45 m away from the origin: 60 percent trees, 25 percent crates, 15 percent rocks. Drawn as instanced meshes (4 draw calls for all of them). They collide: trees as their trunk only, others as a box. ?objects=1000 in the URL changes the count.
+- No quality settings were added (still a proposed item needing Chris's approval). The pixel-ratio stress phases below are only a measurement tool.
+- The ground is 400 m square with no walls: driving off the edge falls, and the car resets when it falls below y=-20.
+
+Performance run (press B in the game): the truck drives a circle by itself for 36 s in three phases (normal, 2.25x pixels, 4x pixels). The extra-pixels phases are a rough stand-in for a weaker GPU, because I cannot throttle the real one. It records average fps, 1 percent low fps, worst frame, hitches over 20 ms, CPU time per frame, draw calls and triangles, and the GPU name the browser reports. The report appears on screen (X closes it) and in the console.
+
+Known limits of the measurement:
+- The monitor is 144 Hz, so frames are capped near 6.9 ms. A result of 144 fps means "at least that fast", not exactly how much spare room there is. The extra-pixels phases are what show the headroom.
+- The circle stays in the flat start area, so it sees fewer hills and props at once than a full drive would. ?objects=3000 makes the scene heavier.
+- CPU time is JavaScript time only; GPU time is not measured.
+- The browser may run on the integrated Radeon instead of the RX 6550M. The GPU line in the report shows which one.
+
+Measured without a browser (Node, this laptop), physics and generation only:
+- Terrain generation 9 ms. World build with 300 props 17 ms.
+- Physics step average: 0.05 ms (no props), 0.07 ms (300 props), 0.14 ms (1,000), 0.35 ms (3,000). Worst single step about 2.5 ms at 3,000.
+- So physics is a small slice of a 16.7 ms frame (60 fps) even with 3,000 props. Rendering is what remains to be measured.

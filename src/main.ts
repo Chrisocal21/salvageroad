@@ -1,23 +1,39 @@
 import * as THREE from 'three';
+import { Bench, formatReport, scriptedInput } from './bench';
 import { createRapierSim } from './lab/rapierSim';
 import { RAMP, type CarSim, type DriveInput } from './lab/types';
 import { createElCajon } from './render/elCajon';
+import { createProps } from './render/props';
+import { createTerrainMesh } from './render/terrainMesh';
+import { summarizeFrames } from './rules/perfStats';
+import { scatterProps } from './rules/scatter';
+import { buildTerrainGrid, TERRAIN } from './rules/terrain';
 
-// Step Zero stage 4: the placeholder El Cajon driving on flat ground with a ramp.
-// W/S gas and brake/reverse, A/D steer, Space handbrake, R reset.
+// Step Zero: the placeholder El Cajon driving on generated terrain among placeholder props.
+// W/S gas and brake/reverse, A/D steer, Space handbrake, R reset, B performance run.
+// Page options: ?objects=1000 changes the prop count (default 300).
 
 const STEP = 1 / 60; // physics always runs at a fixed 60 steps per second
 
+const params = new URLSearchParams(location.search);
+const propCount = Math.max(0, Number(params.get('objects') ?? 300) | 0);
+
 const hud = document.getElementById('hud') as HTMLElement;
+const benchPanel = document.getElementById('bench') as HTMLElement;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const basePixelRatio = Math.min(window.devicePixelRatio, 2);
+let renderScale = 1;
+function applySize() {
+  renderer.setPixelRatio(basePixelRatio * renderScale);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+applySize();
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x9fb4c4);
-scene.fog = new THREE.Fog(0x9fb4c4, 80, 400);
+scene.fog = new THREE.Fog(0x9fb4c4, 120, 380);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x556655, 1.4));
 const sun = new THREE.DirectionalLight(0xffffff, 1.2);
 sun.position.set(30, 50, 20);
@@ -25,14 +41,17 @@ scene.add(sun);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 700);
 
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(1000, 1000),
-  new THREE.MeshStandardMaterial({ color: 0x6b7a5a }),
-);
-ground.rotation.x = -Math.PI / 2;
-scene.add(ground);
-// Grid lines give a sense of speed on an otherwise empty plane.
-scene.add(new THREE.GridHelper(1000, 200, 0x445544, 0x556655));
+// The world: seeded terrain and props, shared by what you see and what you drive on.
+const grid = buildTerrainGrid(TERRAIN);
+const props = scatterProps(7, propCount, TERRAIN.size, 45);
+scene.add(createTerrainMesh(grid));
+createProps(props, TERRAIN.seed).forEach((o) => scene.add(o));
+const worldSpec = { terrain: grid, props };
+
+// Grid lines in the flat start area give a sense of speed where there is nothing else to look at.
+const startGrid = new THREE.GridHelper(120, 60, 0x445544, 0x556655);
+startGrid.position.y = 0.03;
+scene.add(startGrid);
 
 const ramp = new THREE.Mesh(
   new THREE.BoxGeometry(RAMP.halfExtents[0] * 2, RAMP.halfExtents[1] * 2, RAMP.halfExtents[2] * 2),
@@ -65,18 +84,15 @@ function readInput(): DriveInput {
   };
 }
 
-let sim: CarSim = await createRapierSim();
+let sim: CarSim = await createRapierSim(worldSpec);
 let resetting = false;
 async function reset() {
   if (resetting) return;
   resetting = true;
-  sim = await createRapierSim();
+  sim = await createRapierSim(worldSpec);
   prev = curr = takeSnapshot();
   resetting = false;
 }
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyR') void reset();
-});
 
 // Mouse look: click the page to capture the mouse, Esc to release it.
 const UP = new THREE.Vector3(0, 1, 0);
@@ -120,6 +136,40 @@ function takeSnapshot(): Snapshot {
 let prev = takeSnapshot();
 let curr = prev;
 
+// Performance run (B key) and live frame statistics.
+function gpuName(): string {
+  const gl = renderer.getContext();
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  return ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : 'unknown (browser hides it)';
+}
+const bench = new Bench(
+  {
+    gpu: gpuName(),
+    screen: `${window.innerWidth}x${window.innerHeight}`,
+    props: props.length,
+    terrain: `${TERRAIN.size} m terrain, ${TERRAIN.cells * TERRAIN.cells} cells`,
+    basePixelRatio,
+  },
+  (scale) => {
+    renderScale = scale;
+    applySize();
+  },
+);
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  if (e.code === 'KeyR') void reset();
+  if (e.code === 'KeyX') benchPanel.style.display = 'none';
+  if (e.code === 'KeyB') {
+    if (bench.active) {
+      bench.cancel();
+    } else {
+      benchPanel.style.display = 'none';
+      void reset().then(() => bench.start(performance.now()));
+    }
+  }
+});
+
+const recent: number[] = []; // last 5 seconds of frame times, for the live readout
 const camTarget = new THREE.Vector3();
 const camPos = new THREE.Vector3();
 const back = new THREE.Vector3();
@@ -130,22 +180,28 @@ let camY = 0;
 let camReady = false;
 let last = performance.now();
 let accumulator = 0;
-let frames = 0;
 let fpsClock = last;
-let fps = 0;
+let liveText = '';
 
 renderer.setAnimationLoop((now) => {
-  const dt = Math.min((now - last) / 1000, 0.1);
+  const frameStart = performance.now();
+  const frameMs = now - last;
+  const dt = Math.min(frameMs / 1000, 0.1);
   accumulator += dt;
   last = now;
 
-  const input = readInput();
+  recent.push(frameMs);
+  while (recent.length > 300 || (recent.length > 30 && recent.reduce((s, v) => s + v, 0) > 5000)) recent.shift();
+
+  const input = bench.active ? scriptedInput(sim.speed()) : readInput();
+  const physicsStart = performance.now();
   while (accumulator >= STEP) {
     sim.step(STEP, input);
     prev = curr;
     curr = takeSnapshot();
     accumulator -= STEP;
   }
+  const physicsMs = performance.now() - physicsStart;
   if (curr.chassisPos.y < -20) void reset(); // fell off the world
 
   const alpha = accumulator / STEP;
@@ -186,21 +242,31 @@ renderer.setAnimationLoop((now) => {
   camera.lookAt(camTarget);
 
   renderer.render(scene, camera);
+  const cpuMs = performance.now() - frameStart; // JavaScript time this frame; GPU time is not included
 
-  frames++;
-  if (now - fpsClock >= 500) {
-    fps = (frames * 1000) / (now - fpsClock);
-    frames = 0;
-    fpsClock = now;
+  if (bench.active) {
+    bench.frame(now, frameMs, cpuMs, physicsMs, renderer.info.render.calls, renderer.info.render.triangles);
+    if (!bench.active && bench.report) {
+      benchPanel.textContent = formatReport(bench.report);
+      benchPanel.style.display = 'block';
+      console.log(formatReport(bench.report));
+    }
   }
-  hud.textContent =
-    `${(Math.abs(sim.speed()) * 3.6).toFixed(0)} km/h   ${fps.toFixed(0)} fps\n` +
-    `W gas  S brake/reverse  A/D steer  Space handbrake  R reset\n` +
-    `Click the page to look around with the mouse, Esc to release`;
+
+  if (now - fpsClock >= 500) {
+    fpsClock = now;
+    const s = summarizeFrames(recent);
+    liveText = `${s.avgFps.toFixed(0)} fps   1% low ${s.onePercentLowFps.toFixed(0)}   cpu ${cpuMs.toFixed(1)} ms   draws ${renderer.info.render.calls}`;
+  }
+  const status = bench.active
+    ? `PERFORMANCE RUN: ${bench.phaseName()}, ${bench.remaining(now).toFixed(0)} s left (B cancels)`
+    : 'W gas  S brake/reverse  A/D steer  Space handbrake  R reset  B performance run\n' +
+      'Click the page to look around with the mouse, Esc to release';
+  hud.textContent = `${(Math.abs(sim.speed()) * 3.6).toFixed(0)} km/h   ${liveText}\n${status}`;
 });
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  applySize();
 });

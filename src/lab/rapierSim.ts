@@ -1,15 +1,53 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { resistanceForce, resolvePedals, updateSteer } from '../rules/driving';
+import { PROP_COLLIDER, type Prop } from '../rules/scatter';
+import { columnMajor, terrainHeight, type TerrainGrid } from '../rules/terrain';
 import { CAR, RAMP, type CarSim, type DriveInput, type Pose } from './types';
 
 type Quat = [number, number, number, number]; // x, y, z, w
 
-export async function createRapierSim(): Promise<CarSim> {
+/** What the world is made of. With nothing given it is the flat lab ground. */
+export interface WorldSpec {
+  terrain?: TerrainGrid;
+  props?: Prop[];
+}
+
+/** Rapier's heightfield, built from the same grid the visible terrain mesh uses. */
+export function heightfieldDesc(grid: TerrainGrid): RAPIER.ColliderDesc {
+  // Rapier counts cells, not vertices: a grid of N cells has N + 1 heights along each side.
+  return RAPIER.ColliderDesc.heightfield(
+    grid.nrows - 1,
+    grid.ncols - 1,
+    columnMajor(grid),
+    { x: grid.spec.size, y: 1, z: grid.spec.size },
+  );
+}
+
+export async function createRapierSim(spec: WorldSpec = {}): Promise<CarSim> {
   await RAPIER.init();
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.timestep = 1 / 60;
 
-  world.createCollider(RAPIER.ColliderDesc.cuboid(500, 0.5, 500).setTranslation(0, -0.5, 0));
+  if (spec.terrain) {
+    world.createCollider(heightfieldDesc(spec.terrain));
+  } else {
+    world.createCollider(RAPIER.ColliderDesc.cuboid(500, 0.5, 500).setTranslation(0, -0.5, 0));
+  }
+
+  // Static boxes for the props. Trees collide as their trunk only.
+  const seed = spec.terrain?.spec.seed ?? 0;
+  for (const prop of spec.props ?? []) {
+    const c = PROP_COLLIDER[prop.kind];
+    const hx = c.hx * prop.scale;
+    const hy = c.hy * prop.scale;
+    const hz = c.hz * prop.scale;
+    const half = prop.yaw / 2;
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(hx, hy, hz)
+        .setTranslation(prop.x, terrainHeight(seed, prop.x, prop.z) + hy, prop.z)
+        .setRotation({ x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }),
+    );
+  }
 
   const half = RAMP.pitch / 2;
   world.createCollider(
