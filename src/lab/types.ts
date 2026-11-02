@@ -29,6 +29,9 @@ export const CAR = {
   wheelRearZ: -1.5,
   wheelY: -0.1, // suspension attach point relative to chassis center
   suspensionRest: 0.35,
+  suspensionStiffness: 30,
+  suspensionCompression: 4, // damping while the spring is squashed (Rapier default 0.83 bounced for 2 s)
+  suspensionRelaxation: 5, // damping while it springs back (Rapier default 0.88)
   spawn: [0, 1.6, -20] as const,
   maxEngineForce: 4500,
   maxBrake: 50,

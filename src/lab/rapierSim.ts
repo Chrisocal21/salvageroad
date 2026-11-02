@@ -45,7 +45,9 @@ export async function createRapierSim(): Promise<CarSim> {
       CAR.suspensionRest,
       CAR.wheelRadius,
     );
-    vehicle.setWheelSuspensionStiffness(i, 30);
+    vehicle.setWheelSuspensionStiffness(i, CAR.suspensionStiffness);
+    vehicle.setWheelSuspensionCompression(i, CAR.suspensionCompression);
+    vehicle.setWheelSuspensionRelaxation(i, CAR.suspensionRelaxation);
     vehicle.setWheelMaxSuspensionTravel(i, 0.3);
     vehicle.setWheelFrictionSlip(i, 1.4);
     vehicle.setWheelMaxSuspensionForce(i, 100000);

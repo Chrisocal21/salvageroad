@@ -71,3 +71,10 @@ Decided by Claude (Chris did not specify), all in src/rules/driving.ts so they a
 - Placeholder model: boxes only (src/render/elCajon.ts). Wheels steer and spin.
 
 Not verified: how it looks and feels in a browser. Only the numbers were measured headless.
+
+### Update after Chris tried stage 4
+
+Chris asked for mouse look, and said the truck bounces like the old cannon-es one, "as if there was a box tire".
+
+- Bounce: FOUND AND FIXED by measurement. Cruising on flat ground was smooth, but after any drop the car oscillated for about 2.2 s, 7 overshoots, and the suspension bottomed out (chassis dipped from 0.75 m to 0.48 m). Rapier's default damping (0.83 compression, 0.88 relaxation) is far too low for this car. Now 4 and 5: it settles in about 0.7 s with one small overshoot and no bottoming (lowest 0.67 m). A test (tests/physics-lab.test.ts) guards this. If it now feels too stiff or floaty, these two numbers in src/lab/types.ts are the ones to move.
+- Mouse look: click the page to capture the mouse, Esc to release. The chase camera orbits the car (yaw and pitch), and drifts back to straight behind the car after 2.5 s without mouse movement. Sensitivity 0.0025 rad per pixel, not inverted. All provisional; the camera choice (cockpit, chase, switchable) is still open.

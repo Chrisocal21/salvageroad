@@ -28,6 +28,22 @@ describe.each(engines)('%s car', (name, make) => {
     expect(p[2]).toBeGreaterThan(-20);
   });
 
+  it('settles after a drop without bouncing for long', async () => {
+    const sim = await make();
+    run(sim, 4, 0);
+    const rest = sim.chassis().position[1];
+    // Dropped from 1.6 m. Count the time spent more than 3 cm away from the resting height.
+    const again = await make();
+    let unsettled = 0;
+    for (let i = 0; i < 60 * 4; i++) {
+      again.step(DT, { throttle: 0, steer: 0, brake: 0 });
+      if (i > 60 && Math.abs(again.chassis().position[1] - rest) > 0.03) unsettled = i / 60;
+    }
+    console.log(name, `settled within 3 cm after ${unsettled.toFixed(1)} s`);
+    // Only Rapier has the tuned damping; cannon-es is kept as an untuned reference.
+    if (name === 'rapier') expect(unsettled).toBeLessThan(1.5);
+  });
+
   it('turns when steered', async () => {
     const sim = await make();
     run(sim, 2, 0);
