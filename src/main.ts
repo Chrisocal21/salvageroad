@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Bench, formatReport, scriptedInput } from './bench';
 import { CONTAINERS } from './data/containers';
 import { createRapierSim } from './lab/rapierSim';
@@ -33,6 +34,10 @@ const hud = createHud(document.body);
 const benchPanel = document.getElementById('bench') as HTMLElement;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const basePixelRatio = Math.min(window.devicePixelRatio, 2);
 let renderScale = 1;
 function applySize() {
@@ -43,12 +48,29 @@ applySize();
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
+// Reflected light lets the car's clearcoat and chrome show the body contours.
+const environmentGenerator = new THREE.PMREMGenerator(renderer);
+const environmentRoom = new RoomEnvironment();
+const environment = environmentGenerator.fromScene(environmentRoom, 0.04);
+scene.environment = environment.texture;
+scene.environmentIntensity = 0.65;
+environmentRoom.dispose();
+environmentGenerator.dispose();
 scene.background = new THREE.Color(0x9fb4c4);
 scene.fog = new THREE.Fog(0x9fb4c4, 120, 380);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x556655, 1.4));
 const sun = new THREE.DirectionalLight(0xffffff, 1.2);
 sun.position.set(30, 50, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = sun.shadow.camera.bottom = -7;
+sun.shadow.camera.right = sun.shadow.camera.top = 7;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 80;
+sun.shadow.normalBias = 0.015;
+sun.shadow.bias = -0.0001;
 scene.add(sun);
+scene.add(sun.target);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 700);
 
@@ -57,9 +79,14 @@ const SEED = 1;
 const grid = buildTerrainGrid(TERRAIN);
 const town = generateTown(SEED);
 const props = scatterProps(7, propCount, TERRAIN.size, 45, 12, [{ x: town.center.x, z: town.center.z, r: 70 }]);
-scene.add(createTerrainMesh(grid));
+const terrainMesh = createTerrainMesh(grid);
+terrainMesh.receiveShadow = true;
+scene.add(terrainMesh);
 createProps(props, TERRAIN.seed).forEach((o) => scene.add(o));
 const townView = createTownView(town);
+townView.group.traverse(object => {
+  if (object instanceof THREE.Mesh) object.receiveShadow = true;
+});
 scene.add(townView.group);
 const worldSpec = {
   terrain: grid,
@@ -324,6 +351,8 @@ renderer.setAnimationLoop((now) => {
   const alpha = accumulator / STEP;
   car.body.position.lerpVectors(prev.chassisPos, curr.chassisPos, alpha);
   car.body.quaternion.slerpQuaternions(prev.chassisQuat, curr.chassisQuat, alpha);
+  sun.target.position.copy(car.body.position);
+  sun.position.set(car.body.position.x + 20, car.body.position.y + 32, car.body.position.z + 14);
   car.wheels.forEach((wheel, i) => {
     wheel.position.lerpVectors(prev.wheelPos[i], curr.wheelPos[i], alpha);
     wheel.quaternion.slerpQuaternions(prev.wheelQuat[i], curr.wheelQuat[i], alpha);

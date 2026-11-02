@@ -19,14 +19,17 @@ export interface CarSim {
   speed(): number;
 }
 
-// One placeholder El Cajon: long, low, 4 wheels. Chassis forward is +Z.
+// The longer cargo bed adds rear overhang. Recenter the chassis and axle positions together.
+export const EL_CAJON_BED_EXTENSION = 0.4;
+
+// El Cajon chassis forward is +Z.
 export const CAR = {
   mass: 1400,
-  halfExtents: [0.95, 0.35, 2.4] as const,
+  halfExtents: [0.95, 0.35, 2.4 + EL_CAJON_BED_EXTENSION / 2] as const,
   wheelRadius: 0.38,
   wheelX: 0.9,
-  wheelFrontZ: 1.6,
-  wheelRearZ: -1.5,
+  wheelFrontZ: 1.6 + EL_CAJON_BED_EXTENSION / 2,
+  wheelRearZ: -1.5 + EL_CAJON_BED_EXTENSION / 2,
   wheelY: -0.1, // suspension attach point relative to chassis center
   suspensionRest: 0.35,
   centerOfMassY: 0.35, // height of the centre of mass above the chassis centre; higher means more lean
