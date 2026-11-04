@@ -17,16 +17,21 @@ import { createStorage, describeMove, moveStack } from './rules/vehicleStorage';
 import { truckZone, type TruckZone } from './rules/vehicleZones';
 import { addItem, createInventory } from './rules/inventory';
 import { ITEMS } from './data/items';
-import { consume, createSurvival, isWeak, stepSurvival, SURVIVAL } from './rules/survival';
+import { consume, consumeSlot, createSurvival, isWeak, stepSurvival, SURVIVAL } from './rules/survival';
 import { describeStacks, newContainerState, openContainer } from './rules/loot';
 import { summarizeFrames } from './rules/perfStats';
 import { PROP_COLLIDER } from './rules/scatter';
 import { generateTown, reachableContainers } from './rules/town';
 import { lookWalker, stepWalker, WALKER, type Walker } from './rules/walker';
 import { TerrainTiles } from './render/terrainTiles';
-import { createHorizonSea, createWaterMesh } from './render/worldView';
+import { createHorizonSea, createWaterMesh, paintMap } from './render/worldView';
+import { createRoadMesh, paintRoads } from './render/roadView';
+import { createPlaceMarkers } from './render/placeMarkers';
 import { createGround } from './rules/ground';
 import { generateWorld, waterLevel, WORLD } from './rules/world';
+import { planPlaces } from './rules/places';
+import { planRoads } from './rules/roads';
+import { createMapOverlay } from './ui/mapOverlay';
 import { scatterWorldProps } from './rules/worldProps';
 import { SHIPPING, type ShippingKind } from './data/shippingContainers';
 import { createBaseView } from './render/baseView';
@@ -46,6 +51,7 @@ import { layoutBoxes, siteProblem, walkingSolids } from './rules/baseWorld';
 // Fly mode, for testing and looking around: G turns it on and off. W/A/S/D fly, Q/E down and up, Shift faster, wheel changes speed,
 // T lands you on foot where you are. Nothing collides, nothing gets hungry, the truck stays parked.
 // Always: R reset (rotate, while unloading), B performance run, J jump to the town (testing: the street outside the junkyard).
+// M opens the map (click it to travel there, testing); N makes a new random world, [ and ] step the seed.
 // Page options: ?seed=7 makes a different world. ?objects=3000 changes the prop count (default 1500). ?cargo=ft20,ft40 puts test containers on the truck.
 // ?fixed=1 starts with the El Cajon already put back together, for testing.
 
@@ -100,15 +106,22 @@ const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerH
 
 // The world: made from a seed (?seed=7 gives another). The land, sea, rivers and lakes come from src/rules/world.ts, and the
 // ground you stand and drive on from src/rules/ground.ts. The town sits on level ground in a desert, and you start out in
-// the desert, a walk from it.
+// the desert, a walk from it. The places and the road network between them are planned from the same world
+// (src/rules/places.ts, src/rules/roads.ts), and the ground is cut and filled along the roads so they are drivable.
 const SEED = Number(params.get('seed') ?? 1) | 0;
 const worldMap = generateWorld({ ...WORLD, seed: SEED });
-const ground = createGround(worldMap);
+const tPlan = performance.now();
+const plan = planPlaces(worldMap);
+const network = planRoads(worldMap, plan);
+console.log(`places and roads planned in ${(performance.now() - tPlan).toFixed(0)} ms: ${plan.places.length} places, ${network.roads.length} roads`);
+const ground = createGround(worldMap, network);
 const { town: townSite, spawn: playerSpawn } = worldMap.settlement;
 const town = generateTown(SEED, { x: townSite.x, z: townSite.z });
 const props = scatterWorldProps(worldMap, ground, 7, propCount, 1700);
 const terrainTiles = new TerrainTiles(worldMap, ground);
 scene.add(terrainTiles.group, createWaterMesh(worldMap), createHorizonSea(worldMap));
+scene.add(createRoadMesh(worldMap, network, ground.height));
+scene.add(createPlaceMarkers(plan.places, ground.height));
 // Build the ground round the start in one go, so nothing pops in on the first frame.
 terrainTiles.update(new THREE.Vector3(playerSpawn.x, ground.height(playerSpawn.x, playerSpawn.z) + 2, playerSpawn.z), Infinity);
 createProps(props, ground.height).forEach((o) => scene.add(o));
@@ -141,7 +154,7 @@ cargoView.sync(cargoLayout);
 /** The base's solid blocks, lifted to the height of the ground it stands on. */
 const baseBoxes = () => layoutBoxes(baseLayout).map((box) => ({ ...box, y0: box.y0 + buildBaseY }));
 const worldSpec = {
-  ground: ground.height,
+  ground: (x: number, z: number) => ground.surface(x, z), // what the truck drives on: roads and bridge decks included
   props,
   boxes: [
     ...town.solids.map((b) => ({ x: b.x, z: b.z, hx: b.hx, hz: b.hz, height: b.height })),
@@ -316,6 +329,19 @@ hud.setInventory(inventory);
 const bed = createStorage();
 bedView.update(bed);
 const survival = createSurvival();
+// Clicking a food or drink in the pack eats or drinks it.
+hud.setConsumeHandler((index) => {
+  const slot = inventory.slots[index];
+  const r = consumeSlot(survival, inventory, index);
+  if (r.ok) {
+    say(`${ITEMS[r.itemId].kind === 'food' ? 'Ate' : 'Drank'} ${ITEMS[r.itemId].name}`);
+    hud.setInventory(inventory);
+  } else if (r.reason === 'full' && slot) {
+    say(ITEMS[slot.id].kind === 'food' ? 'Not hungry' : 'Not thirsty');
+  } else if (r.reason === 'inedible') {
+    say('That is not food or drink');
+  }
+});
 const containerStates = new Map(town.containers.map((c) => [c.id, newContainerState(c.kind, c.fixedLoot)]));
 function say(text: string) {
   hud.toast(text);
@@ -397,6 +423,40 @@ window.addEventListener(
   },
   { passive: true },
 );
+
+// The map (M): the island with every road and place, a small one always in the corner and a big one on M.
+// The picture is baked once; each redraw only adds the place markers and where you are. Clicking the big
+// map travels there, for testing. N makes a new random world, [ and ] step the seed, like the /world/ viewer.
+const mapBase = (() => {
+  const terrain = document.createElement('canvas');
+  paintMap(worldMap, terrain);
+  const w = terrain.width * 2; // twice the grid, so the roads stay crisp on the big map
+  const baked = document.createElement('canvas');
+  baked.width = w;
+  baked.height = w;
+  const ctx = baked.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(terrain, 0, 0, w, w);
+  paintRoads(worldMap, network, ctx, w);
+  return baked;
+})();
+const mapOverlay = createMapOverlay(document.body, {
+  base: mapBase,
+  worldSize: WORLD.size,
+  places: plan.places,
+  onJump: (x, z) => {
+    mapOverlay.close();
+    if (flying) {
+      Object.assign(fly, { x, z, y: Math.max(ground.surface(x, z), 0) + 200 });
+      say('Flew there (testing)');
+      return;
+    }
+    mode = 'walking';
+    camReady = false;
+    Object.assign(walker, { x, z, pitch: 0 });
+    say('Travelled there (testing)');
+  },
+});
 
 // Mouse look: click the page to capture the mouse, Esc to release it.
 const UP = new THREE.Vector3(0, 1, 0);
@@ -860,6 +920,8 @@ renderer.domElement.addEventListener(
   toggleFly,
   isFlying: () => flying,
   world: () => ({ spawn: playerSpawn, town: townSite, stats: worldMap.stats, tiles: terrainTiles.built, drawn: terrainTiles.drawn, props: props.length }),
+  network, // the road network, for tests and screenshots
+  places: plan.places,
   ground: ground.height,
   setFly: (x: number, y: number, z: number, yaw: number, pitch: number) => Object.assign(fly, { x, y, z, yaw, pitch }),
   truck: () => ({ x: car.body.position.x, z: car.body.position.z }),
@@ -921,7 +983,10 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (e.code === 'Tab' || e.code === 'KeyI') {
     if (mode === 'driving' && !bench.active && !flying) toggleCarStorage();
-    else hud.toggleInventory();
+    else {
+      hud.toggleInventory();
+      if (hud.isInventoryOpen()) document.exitPointerLock(); // the mouse is needed to click food and drink
+    }
   }
   if (e.code === 'KeyC') switchSeat();
   buildKeys(e);
@@ -929,7 +994,18 @@ window.addEventListener('keydown', (e) => {
     if (unloading) buildRot = buildRot === 0 ? 1 : 0;
     else void reset('town');
   }
-  if (e.code === 'Escape') closeBed();
+  if (e.code === 'Escape') {
+    closeBed();
+    mapOverlay.close();
+    if (hud.isInventoryOpen()) hud.toggleInventory();
+  }
+  if (e.code === 'KeyM') {
+    mapOverlay.toggle();
+    if (mapOverlay.isOpen()) document.exitPointerLock(); // the mouse is needed to click the map
+  }
+  if (e.code === 'KeyN') location.search = `?seed=${Math.floor(Math.random() * 100000)}`;
+  if (e.code === 'BracketRight') location.search = `?seed=${SEED + 1}`;
+  if (e.code === 'BracketLeft') location.search = `?seed=${SEED - 1}`;
   if (e.code === 'KeyG') toggleFly();
   if (e.code === 'KeyJ') jumpToTown();
   if (e.code === 'KeyT' && flying) toggleFly(true);
@@ -1040,8 +1116,8 @@ renderer.setAnimationLoop((now) => {
     const stepFromZ = walker.z;
     stepWalker(walker, { ...readWalkInput(), speedScale: isWeak(survival) ? SURVIVAL.weakSpeedScale : 1 }, dt, walkSolids, [truckObb()]);
     const level = waterLevel(worldMap, walker.x, walker.z);
-    if (level !== null && level - ground.height(walker.x, walker.z) > 1.1) {
-      walker.x = stepFromX; // too deep to wade: the water stops you
+    if (level !== null && level - ground.surface(walker.x, walker.z) > 1.1) {
+      walker.x = stepFromX; // too deep to wade: the water stops you (on a bridge deck you stay dry)
       walker.z = stepFromZ;
     }
     currentTarget = findTarget(walker, {
@@ -1050,7 +1126,7 @@ renderer.setAnimationLoop((now) => {
       parts: looseParts.filter(onTop).map((p) => ({ id: p.id, x: p.x, z: p.z, hx: PART_REACH_BOX, hz: PART_REACH_BOX })),
       pickups: pickups.map((p) => ({ id: p.id, x: p.x, z: p.z, hx: 0.55, hz: 0.55 })),
     });
-    const groundY = ground.height(walker.x, walker.z);
+    const groundY = ground.surface(walker.x, walker.z);
     camera.position.set(walker.x, groundY + WALKER.eyeHeight, walker.z);
     camera.rotation.set(walker.pitch, walker.yaw + Math.PI, 0, 'YXZ'); // the camera looks down -Z, so turn it half way round
   } else {
@@ -1107,6 +1183,16 @@ renderer.setAnimationLoop((now) => {
     fpsClock = now;
     const s = summarizeFrames(recent);
     liveText = `${s.avgFps.toFixed(0)} fps   1% low ${s.onePercentLowFps.toFixed(0)}   cpu ${cpuMs.toFixed(1)} ms   draws ${renderer.info.render.calls}`;
+    // The map follows where you are. yaw here is the map convention: 0 faces +Z, down the map.
+    const mapX = flying ? fly.x : mode === 'walking' ? walker.x : car.body.position.x;
+    const mapZ = flying ? fly.z : mode === 'walking' ? walker.z : car.body.position.z;
+    let mapYaw = walker.yaw;
+    if (flying) mapYaw = fly.yaw + Math.PI; // the fly camera's 0 faces -Z
+    else if (mode === 'driving') {
+      back.set(0, 0, 1).applyQuaternion(car.body.quaternion);
+      mapYaw = Math.atan2(back.x, back.z);
+    }
+    mapOverlay.redraw(mapX, mapZ, mapYaw);
   }
   if (hud.isStorageOpen() && (flying || (mode === 'walking' && currentTarget?.kind !== 'truck'))) closeBed();
   hud.setMode(flying ? 'walking' : mode);
@@ -1176,14 +1262,14 @@ renderer.setAnimationLoop((now) => {
     hud.setPrompt(flying ? null : prompt);
     hud.setHint(
       flying
-        ? 'FLY MODE (testing)   W/A/S/D fly   Q/E down and up   Shift faster   Wheel speed   T land here on foot   G back'
+        ? 'FLY MODE (testing)   W/A/S/D fly   Q/E down and up   Shift faster   Wheel speed   T land here on foot   M map   G back'
         : unloading
         ? 'Click put down   Right-click pick up   R rotate   Wheel height   1-9 choose   W/A/S/D walk   U finish'
         : mode === 'walking'
-        ? 'W/A/S/D walk   Shift run   E use   F eat   Q drink   Tab carrying   U unload   R reset   J jump to town   G fly   B performance run   Click the page to look around, Esc to release'
+        ? 'W/A/S/D walk   Shift run   E use   F eat   Q drink   Tab carrying   M map   U unload   R reset   J jump to town   G fly   B performance run   Click the page to look around, Esc to release'
         : seat === 'passenger'
         ? 'Passenger seat   C switch to driver   E get out   Tab storage   F eat   Q drink'
-        : 'W gas   S brake/reverse   A/D steer   Space handbrake   E get out   C passenger seat   U unload   F eat   Q drink   Tab storage   R reset   B performance run',
+        : 'W gas   S brake/reverse   A/D steer   Space handbrake   E get out   C passenger seat   U unload   F eat   Q drink   Tab storage   M map   R reset   B performance run',
     );
     hud.setDebug(flying ? `${liveText}\nx ${fly.x.toFixed(0)}  z ${fly.z.toFixed(0)}  height ${fly.y.toFixed(0)} m  speed ${flySpeed.toFixed(0)} m/s` : liveText);
   }

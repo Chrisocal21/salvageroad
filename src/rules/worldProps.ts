@@ -34,6 +34,7 @@ export function scatterWorldProps(
     if (r < clear) continue;
     if (Math.hypot(x - spawn.x, z - spawn.z) < 6) continue; // not on top of the player's starting point
     if (Math.abs(x) > map.half - 20 || Math.abs(z) > map.half - 20) continue;
+    if (ground.roadDistance(x, z) < 12) continue; // not on a road
     const h = ground.height(x, z);
     if (h < 2 || waterLevel(map, x, z) !== null) continue; // dry land only
     const slope = Math.hypot(ground.height(x + 3, z) - ground.height(x - 3, z), ground.height(x, z + 3) - ground.height(x, z - 3)) / 6;

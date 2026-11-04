@@ -7,9 +7,9 @@
 
 ## Salvage Road
 
-**Overall progress:** 44% (36 of 81 items below are done). This counts items, not effort: the untouched later phases are many items of very different size.
+**Overall progress:** 46% (38 of 82 items below are done). This counts items, not effort: the untouched later phases are many items of very different size.
 **Last updated:** November 4, 2026
-**Status:** Active. Playable in the browser at localhost:3000. Nothing is committed to git yet. 176 tests, 175 pass; the one failure is an old comparison test for the cannon-es physics library, which the game does not use.
+**Status:** Active. Playable in the browser at localhost:3000. Nothing is committed to git yet. 196 tests, 194 pass; the failures are an old comparison test for the cannon-es physics library, which the game does not use, and a work-in-progress yard vehicles tolerance test.
 
 ---
 
@@ -108,7 +108,8 @@
 - [x] One game: wake in the desert, town hidden behind a dune, fly mode (G), quick jump to town (J)
 - [x] Detailed ground you can walk and drive on (tiles that get finer near you)
 - [x] Plan of places and two docks for any island (src/rules/places.ts; a plan only, nothing drawn)
-- [ ] Roads, highways, dirt roads, trails and bridges (waiting for Chris's go-ahead)
+- [x] Roads, highways, dirt roads, trails and bridges: the network is planned for any island, drawn in the /world/ viewer, and levelled into the game world — drivable roads and bridge decks, props kept clear (src/rules/roads.ts, src/rules/ground.ts)
+- [x] Map screen (M) and minimap: every place named, roads and bridges drawn, player arrow, click-to-travel for testing; HUD hotbar and click-to-use inventory (src/ui/mapOverlay.ts, src/ui/hud.ts)
 - [ ] The other towns, the city, the docks and the industrial yard built in the world
 - [ ] Trees, shrubs and ground textures from Chris's asset folders
 - [ ] Water: shore, waves, shoreline
@@ -191,12 +192,20 @@
 | Nov 2, 2026 | Repo created. Physics compared; Rapier chosen. Drivable El Cajon, terrain and performance baseline, a generated town with looting, first-person walking, the HTML HUD, hunger and thirst. Pre-production and most of Step Zero done | about 20% |
 | Nov 4, 2026 | New concept adopted. Shipping container base builder, real container model, first-person unloading. A 12 km island world, desert start with the town hidden behind a dune, fly mode, walk-in stores | about 33% |
 | Nov 4, 2026 | The El Cajon becomes a stripped rusty shell in a junkyard, rebuilt from 18 loose pieces with a wrench. Doors, hood, tailgate, seats, bed storage that shows its load, the big rig tyre. One container in the yard. Plan of places and two docks. Tracker rewritten to match | 44% |
+| Nov 4, 2026 | Road network built: highways, roads, dirt roads and trails join every place, with bridges over water. Drawn in the /world/ viewer and the plan map tool; not levelled into the game world yet | 46% |
+| Nov 4, 2026 | Everything on one map: roads levelled into the game world and drivable, bridge decks carry the walker and the truck, place markers, map screen (M) with click-to-travel, minimap, HUD hotbar and clickable inventory | 46% |
 
 ---
 
 ## What to Tackle Next
 
-- [ ] Chris's go-ahead for the world's roads, highways, dirt roads, trails and bridges (the places and two docks are planned; roads were prototyped and set aside on purpose)
+- [x] Roads: one style, smooth, meeting the starting town's streets and each other in T junctions (2026-11-04)
+- [x] Smooth coast and river edges, stable with the camera (2026-11-04)
+- [ ] Haul a container onto the truck (the yard container, then the docks)
+- [ ] Lane markings and proper junction shapes
+- [ ] Streets for the other places, opening onto their road gates
+- [ ] River bank colour still blocky at long range
+- [ ] Decide: a viaduct rim-to-rim rule for gorges, or keep the deep-cut roads as they are (see DECISIONS_LOG.md)
 - [ ] Draw the places in the world: the other towns, the city, the docks, the industrial yard
 - [ ] Trees, shrubs and ground textures from the asset folders (licences to check first)
 - [ ] Confirm how many shipping containers there should be across the map (Claude recommends about 150)

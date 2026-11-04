@@ -1,3 +1,4 @@
+import { worldMaterial } from './worldMaterials';
 import * as THREE from 'three';
 import type { TerrainGrid } from '../rules/terrain';
 
@@ -24,5 +25,5 @@ export function createTerrainMesh(grid: TerrainGrid): THREE.Mesh {
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
 
-  return new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  return new THREE.Mesh(geometry, worldMaterial('terrain', { vertexColors: true, roughness: 1 }));
 }

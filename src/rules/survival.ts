@@ -32,7 +32,24 @@ export function isWeak(s: Survival): boolean {
 
 export type ConsumeResult =
   | { ok: true; itemId: string; restored: number }
-  | { ok: false; reason: 'none' | 'full' };
+  | { ok: false; reason: 'none' | 'full' | 'inedible' };
+
+/**
+ * Eats or drinks the item in one inventory slot, when it is food or drink and the bar is not full.
+ * The inventory panel uses this for click-to-eat.
+ */
+export function consumeSlot(s: Survival, inv: Inventory, index: number): ConsumeResult {
+  const slot = inv.slots[index];
+  if (!slot) return { ok: false, reason: 'none' };
+  const def = ITEMS[slot.id];
+  if (def.kind !== 'food' && def.kind !== 'drink') return { ok: false, reason: 'inedible' };
+  const bar = def.kind === 'food' ? 'hunger' : 'thirst';
+  if (s[bar] >= SURVIVAL.max) return { ok: false, reason: 'full' };
+  removeItem(inv, slot.id, 1);
+  const before = s[bar];
+  s[bar] = Math.min(SURVIVAL.max, before + (def.restores ?? 0));
+  return { ok: true, itemId: slot.id, restored: s[bar] - before };
+}
 
 /**
  * Eats or drinks one item from the inventory. Picks the item that fits the need best: the smallest

@@ -5,7 +5,7 @@
 //  1. Settlements: the starting town is given by the world. A city, more towns, villages, an industrial yard, outposts
 //     and trail lookouts are picked from flat dry ground, spread apart from each other.
 //  2. Docks: two coastal spots with deep water off the quay, flat dry land behind it, far from each other.
-// Roads, highways, dirt roads, trails and bridges come next, once these places are agreed.
+// Roads, highways, dirt roads, trails and bridges are planned from this plan in roads.ts.
 
 import { groundHeight, KIND, kindAt, waterLevel, type WorldMap } from './world';
 import { makeRandom } from './scatter';

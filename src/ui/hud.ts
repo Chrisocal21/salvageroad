@@ -11,6 +11,9 @@ export interface Hud {
   toast(text: string): void;
   setInventory(inv: Inventory): void;
   toggleInventory(): void;
+  isInventoryOpen(): boolean;
+  /** Called when a slot in the inventory panel is clicked. The game decides what that does (eat, drink). */
+  setConsumeHandler(fn: (index: number) => void): void;
   /** Walking shows a crosshair. Driving shows the speedometer. */
   setMode(mode: 'walking' | 'driving'): void;
   setSpeed(kmh: number): void;
@@ -42,6 +45,16 @@ export interface BuildHud {
 }
 
 const TOAST_MS = 4000;
+
+/** A colour per item kind, so the pack and the hotbar can be read at a glance. */
+const KIND_COLOUR: Record<string, string> = {
+  food: '#a8c66c',
+  drink: '#6cb5c6',
+  material: '#b8a88a',
+  tool: '#d9d9d9',
+  part: '#c98a4a',
+  medical: '#e08a8a',
+};
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, parent?: HTMLElement, text?: string) {
   const node = document.createElement(tag);
@@ -92,9 +105,13 @@ export function createHud(parent: HTMLElement): Hud {
   el('span', '', title, 'Carrying');
   const count = el('span', 'hud-inventory-count', title);
   const slotsEl = el('div', 'hud-slots', panel);
-  el('div', 'hud-inventory-hint', panel, 'Tab or I to close');
+  el('div', 'hud-inventory-hint', panel, 'Click food or drink to use it   Tab, I or Esc to close');
   panel.hidden = true;
   let lastInventory: Inventory | null = null;
+  let consumeHandler: ((index: number) => void) | null = null;
+
+  // The hotbar: what you carry, always visible at the bottom centre. Display only.
+  const hotbar = el('div', 'hud-hotbar', root);
 
   // Vehicle storage: two grids side by side. Clicking a slot moves that stack across.
   const storageEl = el('div', 'hud-storage', root);
@@ -131,10 +148,32 @@ export function createHud(parent: HTMLElement): Hud {
     const slots = lastInventory.slots;
     count.textContent = `${slots.filter((s) => s !== null).length} of ${slots.length}`;
     slotsEl.replaceChildren(
-      ...slots.map((s) => {
-        const slot = el('div', s ? 'hud-slot' : 'hud-slot empty');
+      ...slots.map((s, index) => {
+        const usable = s !== null && (ITEMS[s.id].kind === 'food' || ITEMS[s.id].kind === 'drink');
+        const slot = el('div', s ? (usable ? 'hud-slot usable' : 'hud-slot') : 'hud-slot empty');
         if (s) {
+          slot.style.borderLeftColor = KIND_COLOUR[ITEMS[s.id].kind] ?? 'transparent';
           slot.textContent = ITEMS[s.id].name;
+          if (s.count > 1) el('span', 'hud-slot-count', slot, String(s.count));
+          if (usable) {
+            slot.title = `Click to ${ITEMS[s.id].kind === 'food' ? 'eat' : 'drink'}`;
+            slot.addEventListener('click', () => consumeHandler?.(index));
+          }
+        }
+        return slot;
+      }),
+    );
+  }
+
+  function renderHotbar() {
+    if (!lastInventory) return;
+    hotbar.replaceChildren(
+      ...lastInventory.slots.map((s) => {
+        const slot = el('div', s ? 'hud-hotbar-slot' : 'hud-hotbar-slot empty');
+        if (s) {
+          slot.style.borderTopColor = KIND_COLOUR[ITEMS[s.id].kind] ?? 'transparent';
+          slot.title = ITEMS[s.id].name;
+          el('span', 'hud-hotbar-name', slot, ITEMS[s.id].name);
           if (s.count > 1) el('span', 'hud-slot-count', slot, String(s.count));
         }
         return slot;
@@ -202,11 +241,21 @@ export function createHud(parent: HTMLElement): Hud {
     },
     setInventory(inv) {
       lastInventory = inv;
+      renderHotbar();
       if (!panel.hidden) renderInventory();
     },
     toggleInventory() {
       panel.hidden = !panel.hidden;
-      if (!panel.hidden) renderInventory();
+      if (!panel.hidden) {
+        renderInventory();
+        renderHotbar();
+      }
+    },
+    isInventoryOpen() {
+      return !panel.hidden;
+    },
+    setConsumeHandler(fn) {
+      consumeHandler = fn;
     },
     setMode(mode) {
       crosshair.hidden = mode !== 'walking';

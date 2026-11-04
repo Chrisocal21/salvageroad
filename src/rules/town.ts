@@ -15,7 +15,7 @@ import { pieceBox } from './baseWorld';
 
 export const LOT = 28; // m from street centre to street centre
 export const ROAD = 9; // m wide
-const GRID = 3;
+export const GRID = 3;
 const LOT_INSET = ROAD / 2; // free space inside a lot starts this far from the lot edge
 
 /** Store walls. */
@@ -322,8 +322,8 @@ function generateJunkyard(rand: () => number, x: number, z: number, containers: 
   const wreck = (wx: number, wz: number, turned: boolean): Wreck => ({
     x: wx,
     z: wz,
-    hx: turned ? 2.3 : 0.95,
-    hz: turned ? 0.95 : 2.3,
+    hx: turned ? 2.3 : 1.10,
+    hz: turned ? 1.10 : 2.3,
     height: 1.4,
     turned,
     color: WRECK_COLORS[Math.floor(rand() * WRECK_COLORS.length)],
@@ -336,6 +336,9 @@ function generateJunkyard(rand: () => number, x: number, z: number, containers: 
     wreck(x - hx + 2.2, z + 1 + jitter(), false),
     wreck(x + hx - 2.2, z - 3 + jitter(), false),
   ];
+  // Decorative vehicle silhouettes, including the roof rack and the taller pickup cabs.
+  const wreckHeights = [1.60, 1.70, 1.50, 1.25, 1.70];
+  wrecks.forEach((w, index) => { w.height = wreckHeights[index]; });
   const shed: Solid = { x: x + hx - 3, z: z + hz - 3.2, hx: 2, hz: 1.6, height: 2.7 };
   const tires: Solid[] = [
     { x: x - hx + 1.6, z: z - hz + 1.6, hx: 0.55, hz: 0.55, height: 0.9 },

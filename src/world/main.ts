@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createHorizonSea, createTerrainMesh, createWaterMesh, paintMap } from '../render/worldView';
+import { createRoadMesh, paintRoads } from '../render/roadView';
 import { generateWorld, groundHeight, kindAt, KIND, waterLevel, WORLD } from '../rules/world';
+import { planPlaces } from '../rules/places';
+import { planRoads } from '../rules/roads';
 
 // World viewer. Open /world/ on the dev server. Fly over the land mass, the ocean, the rivers and the lakes.
 // Click the page to look around (Esc to let go). W/A/S/D fly, Q/E down and up, Shift faster, mouse wheel changes speed.
@@ -44,9 +47,12 @@ const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerH
 const t0 = performance.now();
 const map = generateWorld({ ...WORLD, seed });
 const t1 = performance.now();
+const plan = planPlaces(map);
+const network = planRoads(map, plan);
+const tRoads = performance.now();
 const terrain = createTerrainMesh(map);
 const water = createWaterMesh(map);
-scene.add(terrain, water, createHorizonSea(map));
+scene.add(terrain, water, createHorizonSea(map), createRoadMesh(map, network));
 const baseMap = document.createElement('canvas');
 paintMap(map, baseMap);
 const t2 = performance.now();
@@ -118,6 +124,7 @@ function drawMap() {
   const w = mapEl.width;
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(baseMap, 0, 0, w, w);
+  paintRoads(map, network, ctx, w);
   // The town (a square) and where the player starts (a ring), so they can be found on the map.
   const { town, spawn } = map.settlement;
   const tx = (town.x / map.spec.size + 0.5) * w;
@@ -166,11 +173,14 @@ window.addEventListener('resize', () => {
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const s = map.stats;
+const roadLength = network.roads.reduce((a, r) => a + r.length, 0);
+const bridgeCount = network.roads.filter((r) => r.bridgeLength > 0).length;
 infoEl.textContent =
   `world seed ${seed}   ${(map.spec.size / 1000).toFixed(0)} km square   grid ${map.spec.cells} (${map.spacing.toFixed(1)} m)\n` +
   `land ${pct(s.landFraction)} (desert ${pct(s.desertFraction)} of it)   ocean ${pct(s.oceanFraction)}   rivers reaching the sea ${s.riverMouths}   lakes ${s.lakes}\n` +
   `highest ${s.highest.toFixed(0)} m   deepest ${s.deepest.toFixed(0)} m\n` +
-  `made in ${(t1 - t0).toFixed(0)} ms, drawn in ${(t2 - t1).toFixed(0)} ms`;
+  `${plan.places.length} places, ${network.roads.length} roads (${(roadLength / 1000).toFixed(0)} km, ${bridgeCount} with bridges), ${network.connected.length} connected\n` +
+  `made in ${(t1 - t0).toFixed(0)} ms, roads in ${(tRoads - t1).toFixed(0)} ms, drawn in ${(t2 - tRoads).toFixed(0)} ms`;
 helpEl.textContent =
   'Click to look   W/A/S/D fly   Q/E down/up   Shift faster   Wheel speed   M map (click it to fly there; square = town, ring = start)   N new world   [ ] seed';
 

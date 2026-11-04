@@ -1,3 +1,4 @@
+import { worldMaterial } from './worldMaterials';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SHIPPING, type ShippingKind } from '../data/shippingContainers';
@@ -92,8 +93,8 @@ interface Item {
 
 export function createBaseView(capacity = 8000): BaseView {
   const group = new THREE.Group();
-  const boxMaterial = new THREE.MeshStandardMaterial({ map: corrugationTexture(), color: 0x46607c, roughness: 0.78, metalness: 0.2 });
-  const pillarMaterial = new THREE.MeshStandardMaterial({ color: 0x8d8c85, roughness: 0.92, metalness: 0 });
+  const boxMaterial = worldMaterial('metal', { map: corrugationTexture(), color: 0x46607c, roughness: 0.78, metalness: 0.2 });
+  const pillarMaterial = worldMaterial('concrete', { color: 0x8d8c85 });
   const invisible = new THREE.MeshBasicMaterial();
   const pw = SHIPPING.pillarWidth;
   const boxGeometry = {

@@ -84,6 +84,35 @@ describe('hud', () => {
     hud.setDebug('');
     expect(q('.hud-debug').hidden).toBe(true);
   });
+
+  it('mirrors the pack in the always-on hotbar', () => {
+    const { hud } = setup();
+    const inv = createInventory();
+    addItem(inv, 'canned_beans', 3);
+    hud.setInventory(inv);
+    const slots = document.querySelectorAll('.hud-hotbar-slot');
+    expect(slots).toHaveLength(12);
+    expect(document.querySelectorAll('.hud-hotbar-slot.empty')).toHaveLength(11);
+    expect(slots[0].textContent).toContain('canned beans');
+    expect(slots[0].querySelector('.hud-slot-count')?.textContent).toBe('3');
+  });
+
+  it('calls the consume handler when a food or drink slot is clicked, and not for other items', () => {
+    const { hud } = setup();
+    const inv = createInventory();
+    addItem(inv, 'canned_beans', 2);
+    addItem(inv, 'wrench', 1);
+    hud.setInventory(inv);
+    const clicks: number[] = [];
+    hud.setConsumeHandler((index) => clicks.push(index));
+    hud.toggleInventory();
+    const slots = document.querySelectorAll<HTMLElement>('.hud-inventory .hud-slot');
+    expect(slots[0].classList.contains('usable')).toBe(true);
+    expect(slots[1].classList.contains('usable')).toBe(false);
+    slots[0].click();
+    slots[1].click();
+    expect(clicks).toEqual([0]);
+  });
 });
 
 describe('hud build bar', () => {

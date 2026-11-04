@@ -1,3 +1,4 @@
+import { worldMaterial } from './worldMaterials';
 import * as THREE from 'three';
 import { noise } from '../rules/terrain';
 import { aridityAt, KIND, NO_WATER, type WorldMap } from '../rules/world';
@@ -39,9 +40,9 @@ const tmpB = new THREE.Color();
 
 /**
  * The colour of the ground at a world position. h is the ground height, slope is rise over run, and wet is true
- * on the banks of a river or lake. The same function paints the 3D terrain tiles and the map.
+ * how muddy the bank of a river or lake is (0 dry to 1 soaked). The same function paints the 3D terrain tiles and the map.
  */
-export function groundColourAt(map: WorldMap, x: number, z: number, h: number, slope: number, wet: boolean, out: THREE.Color): THREE.Color {
+export function groundColourAt(map: WorldMap, x: number, z: number, h: number, slope: number, wet: number, out: THREE.Color): THREE.Color {
   if (h < 0) {
     // Under the sea: sand in the shallows, darker with depth.
     return mix(SAND, SEABED, smooth(0, 14, -h), out).multiplyScalar(0.8);
@@ -65,7 +66,7 @@ export function groundColourAt(map: WorldMap, x: number, z: number, h: number, s
   mix(tmpA, HIGH_ROCK, smooth(460, 620, h), tmpA);
   mix(tmpA, SNOW, smooth(560, 640, h + (patch - 0.5) * 80) * (1 - smooth(0.5, 0.9, slope)), tmpA);
   // River and lake banks are muddy.
-  if (wet) mix(tmpA, MUD, 0.7, tmpA);
+  if (wet > 0) mix(tmpA, MUD, 0.7 * wet, tmpA);
   return out.copy(tmpA).multiplyScalar(0.92 + fine * 0.16);
 }
 
@@ -78,7 +79,7 @@ function groundColour(map: WorldMap, row: number, col: number, out: THREE.Color)
   const hu = map.ground[Math.max(0, row - 1) * n + col];
   const hd = map.ground[Math.min(n - 1, row + 1) * n + col];
   const slope = Math.hypot(hr - hl, hd - hu) / (2 * map.spacing);
-  return groundColourAt(map, -map.half + col * map.spacing, -map.half + row * map.spacing, map.ground[i], slope, map.water[i] !== NO_WATER && map.water[i] > 0.5, out);
+  return groundColourAt(map, -map.half + col * map.spacing, -map.half + row * map.spacing, map.ground[i], slope, map.water[i] !== NO_WATER && map.water[i] > 0.5 ? 1 : 0, out);
 }
 
 export function createTerrainMesh(map: WorldMap): THREE.Mesh {
@@ -122,84 +123,158 @@ export function createTerrainMesh(map: WorldMap): THREE.Mesh {
   geometry.setIndex(new THREE.BufferAttribute(index, 1));
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  return new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }));
+  return new THREE.Mesh(geometry, worldMaterial('terrain', { vertexColors: true, roughness: 0.95, metalness: 0 }));
 }
 
 const SHALLOW = new THREE.Color(0x5fb3b0);
 const DEEP = new THREE.Color(0x0b2f4a);
 const RIVER = new THREE.Color(0x4f9aa0);
 
-/** The water: one surface made of the grid squares that are wet, clearer where it is shallow. */
+/** Rings of grid squares the water surface reaches past the last wet point, so the shore is cut by the ground, not by the mesh. */
+const WATER_MARGIN = 3;
+
+/**
+ * The water: one surface over every wet grid square and a few squares beyond. Each point carries a water level
+ * (spread outward from the wet points, so beyond the shore it lies under the bank). The shader looks up the real
+ * ground height under every pixel: where the ground is above the water the pixel is dropped, and the depth
+ * decides the colour and clarity. So the shoreline is the smooth line where the ground meets the water, however
+ * coarse the mesh, and nothing flickers with the view.
+ */
 export function createWaterMesh(map: WorldMap): THREE.Mesh {
   const n = map.n;
-  const wet = new Int32Array((n - 1) * (n - 1)).fill(-1);
-  let quads = 0;
-  for (let row = 0; row < n - 1; row++) {
-    for (let col = 0; col < n - 1; col++) {
-      const i = row * n + col;
-      if (map.water[i] !== NO_WATER || map.water[i + 1] !== NO_WATER || map.water[i + n] !== NO_WATER || map.water[i + n + 1] !== NO_WATER) {
-        wet[row * (n - 1) + col] = quads++;
+  const level = Float32Array.from(map.water);
+  const river = new Float32Array(n * n);
+  for (let i = 0; i < n * n; i++) river[i] = map.kind[i] === KIND.river || map.kind[i] === KIND.lake ? 1 : 0;
+  for (let ring = 0; ring < WATER_MARGIN; ring++) {
+    const before = Float32Array.from(level);
+    const beforeRiver = Float32Array.from(river);
+    for (let row = 0; row < n; row++) {
+      for (let col = 0; col < n; col++) {
+        const i = row * n + col;
+        if (before[i] !== NO_WATER) continue;
+        let low = Infinity;
+        let rv = 0;
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            const r = row + dr;
+            const c = col + dc;
+            if (r < 0 || c < 0 || r >= n || c >= n) continue;
+            const j = r * n + c;
+            if (before[j] !== NO_WATER && before[j] < low) {
+              low = before[j];
+              rv = beforeRiver[j];
+            }
+          }
+        }
+        if (low !== Infinity) {
+          level[i] = low;
+          river[i] = rv;
+        }
       }
     }
   }
-  const positions = new Float32Array(quads * 4 * 3);
-  const colours = new Float32Array(quads * 4 * 4);
-  const index = new Uint32Array(quads * 6);
-  const c = new THREE.Color();
+  const used = new Int32Array(n * n).fill(-1);
+  let vertices = 0;
+  const quads: number[] = [];
   for (let row = 0; row < n - 1; row++) {
     for (let col = 0; col < n - 1; col++) {
-      const q = wet[row * (n - 1) + col];
-      if (q < 0) continue;
-      const corners = [row * n + col, row * n + col + 1, (row + 1) * n + col, (row + 1) * n + col + 1];
-      // Each corner keeps its own water level, so a river slopes smoothly downhill. A dry corner takes the
-      // lowest level of the wet ones: that puts it under the bank, so the shoreline is where the ground meets
-      // the water and there are no slivers of water sticking up.
-      let level = Infinity;
-      for (const i of corners) if (map.water[i] !== NO_WATER) level = Math.min(level, map.water[i]);
-      corners.forEach((i, v) => {
-        const o = (q * 4 + v) * 3;
-        const own = map.water[i] !== NO_WATER ? map.water[i] : level;
-        positions[o] = -map.half + (col + (v & 1)) * map.spacing;
-        positions[o + 1] = own;
-        positions[o + 2] = -map.half + (row + (v >> 1)) * map.spacing;
-        const depth = Math.max(0, own - map.ground[i]);
-        const river = map.kind[i] === KIND.river || map.kind[i] === KIND.lake;
-        mix(river ? RIVER : SHALLOW, DEEP, smooth(0, river ? 6 : 45, depth), c);
-        const k = (q * 4 + v) * 4;
-        colours[k] = c.r;
-        colours[k + 1] = c.g;
-        colours[k + 2] = c.b;
-        colours[k + 3] = 0.25 + 0.7 * smooth(0, 8, depth); // see-through at the shore
-      });
-      const b = q * 4;
-      index.set([b, b + 2, b + 1, b + 1, b + 2, b + 3], q * 6);
+      const i = row * n + col;
+      if (level[i] === NO_WATER || level[i + 1] === NO_WATER || level[i + n] === NO_WATER || level[i + n + 1] === NO_WATER) continue;
+      for (const k of [i, i + 1, i + n, i + n + 1]) if (used[k] < 0) used[k] = vertices++;
+      quads.push(used[i], used[i + n], used[i + 1], used[i + 1], used[i + n], used[i + n + 1]);
     }
+  }
+  const positions = new Float32Array(vertices * 3);
+  const rivers = new Float32Array(vertices);
+  for (let i = 0; i < n * n; i++) {
+    const v = used[i];
+    if (v < 0) continue;
+    positions[v * 3] = -map.half + (i % n) * map.spacing;
+    positions[v * 3 + 1] = level[i];
+    positions[v * 3 + 2] = -map.half + Math.floor(i / n) * map.spacing;
+    rivers[v] = river[i];
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colours, 4));
-  geometry.setIndex(new THREE.BufferAttribute(index, 1));
+  geometry.setAttribute('aRiver', new THREE.BufferAttribute(rivers, 1));
+  geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(quads), 1));
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
+
+  const heights = new THREE.DataTexture(map.ground, n, n, THREE.RedFormat, THREE.FloatType);
+  heights.minFilter = heights.magFilter = THREE.NearestFilter;
+  heights.generateMipmaps = false;
+  heights.needsUpdate = true;
   const material = new THREE.MeshStandardMaterial({
-    vertexColors: true,
     transparent: true,
     roughness: 0.18,
     metalness: 0.05,
     depthWrite: false,
+    polygonOffset: true, // pulled a hair toward the camera, so water over a seabed never flickers against it
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2,
   });
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uGround = { value: heights };
+    shader.uniforms.uGrid = { value: new THREE.Vector3(n, map.half, map.spacing) };
+    shader.uniforms.uShallow = { value: SHALLOW };
+    shader.uniforms.uRiver = { value: RIVER };
+    shader.uniforms.uDeep = { value: DEEP };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aRiver;\nvarying float vRiver;\nvarying vec3 vWaterPos;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvRiver = aRiver;\nvWaterPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying float vRiver;
+varying vec3 vWaterPos;
+uniform sampler2D uGround;
+uniform vec3 uGrid;
+uniform vec3 uShallow;
+uniform vec3 uRiver;
+uniform vec3 uDeep;
+float groundAt(vec2 xz) {
+  float fx = clamp((xz.x + uGrid.y) / uGrid.z, 0.0, uGrid.x - 1.001);
+  float fz = clamp((xz.y + uGrid.y) / uGrid.z, 0.0, uGrid.x - 1.001);
+  ivec2 c = ivec2(int(floor(fx)), int(floor(fz)));
+  vec2 t = vec2(fx - floor(fx), fz - floor(fz));
+  float a = texelFetch(uGround, c, 0).r;
+  float b = texelFetch(uGround, c + ivec2(1, 0), 0).r;
+  float d = texelFetch(uGround, c + ivec2(0, 1), 0).r;
+  float e = texelFetch(uGround, c + ivec2(1, 1), 0).r;
+  return mix(mix(a, b, t.x), mix(d, e, t.x), t.y);
+}`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+float waterDepth = vWaterPos.y - groundAt(vWaterPos.xz);
+if (waterDepth <= 0.0) discard;
+bool isRiver = vRiver > 0.5;
+vec3 waterColour = mix(isRiver ? uRiver : uShallow, uDeep, smoothstep(0.0, isRiver ? 6.0 : 45.0, waterDepth));
+float clarity = isRiver ? 0.25 + 0.7 * smoothstep(0.0, 8.0, waterDepth) : mix(0.45, 1.0, smoothstep(0.0, 14.0, waterDepth));
+diffuseColor = vec4(waterColour, clarity * smoothstep(0.0, 0.5, waterDepth));`,
+      );
+  };
+  material.customProgramCacheKey = () => 'water-by-ground-depth-v1';
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 2;
   return mesh;
 }
 
-/** Flat deep-water plane that carries the sea out to the horizon beyond the edge of the map. */
+/**
+ * The sea beyond the map: a flat deep-water ring round the map's edge, out to the horizon. Inside the map the
+ * water mesh and the seabed are drawn, so the ring has a hole there (a little overlap, so there is no crack).
+ */
 export function createHorizonSea(map: WorldMap): THREE.Mesh {
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(map.spec.size * 12, map.spec.size * 12).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: DEEP, roughness: 0.25, metalness: 0.05 }),
-  );
-  mesh.position.y = -0.2;
+  const outer = map.spec.size * 6;
+  const inner = map.half - 12;
+  const shape = new THREE.Shape([new THREE.Vector2(-outer, -outer), new THREE.Vector2(outer, -outer), new THREE.Vector2(outer, outer), new THREE.Vector2(-outer, outer)]);
+  shape.holes.push(new THREE.Path([new THREE.Vector2(-inner, -inner), new THREE.Vector2(-inner, inner), new THREE.Vector2(inner, inner), new THREE.Vector2(inner, -inner)]));
+  const geometry = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: DEEP, roughness: 0.18, metalness: 0.05, side: THREE.DoubleSide }));
+  mesh.position.y = 0;
   return mesh;
 }
 

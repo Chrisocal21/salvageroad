@@ -2,7 +2,7 @@
 
 Anything decided that Chris did not specify, library comparison results, and open questions. Newest at the bottom.
 
-## Current state at a glance (updated 2026-11-04, after the places and docks plan)
+## Current state at a glance (updated 2026-11-04, after the one-map merge and HUD work)
 
 This is a summary so you do not have to read the whole history. The dated entries below stay as they were written; where a later entry changed an earlier one, the later one wins.
 
@@ -11,13 +11,15 @@ What the game is now (localhost:3000; /base/ is the container builder sandbox, /
 - The player wakes in the desert, 450 m from the town, with a low dune hiding it. The town (a 3 by 3 block of lots, some walk-in stores with shelves) sits on levelled ground beside a fenced junkyard.
 - The junkyard holds the El Cajon on blocks as a rusty shell, 18 loose pieces (15 kinds: engine, battery, hood, 4 wheels in one stack, seat, two bumpers, tailgate, dashboard, steering wheel, windshield, two doors, grille, headlights), a toolbox with the wrench, a big rig tyre, and one 20 ft shipping container. Order and rules are in src/rules/carParts.ts.
 - The truck: driver's door to drive, passenger door to ride, hood opens, bed storage (24 slots) shows what is in it. src/rules/vehicleZones.ts, vehicleStorage.ts, bedLoad.ts.
-- Keys: W/A/S/D move or drive, Shift run, E use, F eat, Q drink, Tab or I inventory (in the truck: pack plus vehicle storage), C switch seat, U unload containers, R reset (or rotate while placing), J jump to the town, G fly mode (T lands), B performance run, H is gone. URL options: ?fixed=1 starts with the truck whole, ?cargo=ft20,ft40 puts containers on the truck, ?objects=N sets the prop count.
-- The plan of places (src/rules/places.ts): starting town, 1 city, 3 more towns, 4 villages, 1 industrial yard, 6 outposts, 5 lookouts and 2 docks. Rules only, not drawn. Roads are NOT built. tools/place-map.ts draws it as a picture.
-- Tests: 176, one failing (the old cannon-es ramp comparison, which the game does not use).
+- Keys: W/A/S/D move or drive, Shift run, E use, F eat, Q drink, Tab or I inventory (in the truck: pack plus vehicle storage), C switch seat, U unload containers, R reset (or rotate while placing), J jump to the town, G fly mode (T lands), B performance run, M map (click it to travel there, for testing), N and [ ] reseed the world, H is gone. URL options: ?fixed=1 starts with the truck whole, ?cargo=ft20,ft40 puts containers on the truck, ?objects=N sets the prop count.
+- The plan of places (src/rules/places.ts): starting town, 1 city, 3 more towns, 4 villages, 1 industrial yard, 6 outposts, 5 lookouts and 2 docks. In the game each place is a pole with a coloured lamp for now; the buildings are still to come. tools/place-map.ts draws the plan as a picture.
+- The road network (src/rules/roads.ts): highways, roads, dirt roads and trails join every place, with bridges over water. The game levels the ground along the roads and the decks carry the walker and the truck (src/rules/ground.ts). Also drawn in the /world/ viewer.
+- A minimap sits top right; M opens the big map with every place named, the roads, bridges in red, a scale bar and a player arrow (src/ui/mapOverlay.ts). The HUD has an always-visible hotbar and a click-to-use inventory (src/ui/hud.ts).
+- Tests: 196, two failing (the old cannon-es ramp comparison, which the game does not use, and a work-in-progress yard vehicles tolerance test).
 
 Not saved on reload: the truck rebuild, the inventory, the loot, the bed contents. Only the base (placed containers) is saved, in the browser, under its own key.
 
-Known limits (collected): parts are not solid and can be dropped inside walls; store interiors are lit like outside; the sea is flat and the shore blocky from the air; the truck can drive into the sea; the bed's contents do not move as the truck drives; doors have no collision; no fuel, damage, weather or time of day; the performance run (B) has not been re-measured since the world grew.
+Known limits (collected): parts are not solid and can be dropped inside walls; store interiors are lit like outside; the sea is flat and the shore blocky from the air; the truck can drive into the sea; the bed's contents do not move as the truck drives; doors have no collision; no fuel, damage, weather or time of day; the performance run (B) has not been re-measured since the world grew; wading under a bridge reads the deck as the ground, so the deep-water block does not apply there.
 
 ## 2026-11-02 Setup
 
@@ -486,3 +488,54 @@ Chris asked for one cargo container in the junkyard to come back and collect lat
 - Docks: a coastal spot with deep open water off the quay, flat dry land behind it, no river or lake beside it. Dock 1 is a few km from the start town (about 4 km); dock 2 is at least 6.5 km from dock 1, usually on the other side of the island. Each dock records where the quay is and which way the sea lies. The map for seed 1 puts the docks on the west and east coasts.
 - Roads: NOT built. Claude had already written and run a road finder (highways joining the big places, roads and dirt roads for the rest, trails to lookouts, bridges over rivers) before Chris said to wait. It was taken out of the project; a copy is kept outside it (not in git) so it is not lost. Nothing in the game draws, levels or uses places yet: they are a plan only.
 - Not decided: how many shipping containers across the map (see the recommendation in the reply), what each place looks like, and what a dock contains.
+
+## The road network: highways, roads, dirt roads, trails and bridges (Chris's go-ahead)
+
+Chris gave the go-ahead for the second half of the world plan: the roads that join the places. Built fresh (not the set-aside prototype) as pure rules, like the places: src/rules/roads.ts, tests in tests/roads.test.ts, drawn in the /world/ viewer (src/render/roadView.ts) and in the plan map tool. Nothing in the game itself levels or uses the network yet.
+- Four classes (Claude chose the numbers): highway 14 m wide, climbs at most 6 percent; road 9 m, 8 percent; dirt road 6 m, 12 percent; trail 2.5 m, 22 percent.
+- What joins what (Claude decided): a highway spine links the city, the towns, the industrial yard and the docks, as a minimum spanning tree (every big place on the highway for the least road built), plus up to two extra highway links where following the spine would be nearly twice as far as going direct, so the map gets a loop or two like a real one. Each village joins the nearest place by road, each outpost by dirt road, each lookout by trail.
+- Routing: every road is found by A* over the world grid. Climbing costs more the steeper a class is allowed to climb, so highways swing round hills while trails go straight over. Crossing water costs a lot, so bridges happen only where crossing is far shorter than going round. Hugging the coast costs a little, so roads keep off the beach. Ocean is impassable.
+- Heights: the route is smoothed, then the road's height profile is fitted so it never climbs steeper than its class allows and stays within 12 m of the natural ground, cutting into rises and riding embankments over dips. Bridge decks are pinned flat, at least 2 m above the water, and the approaches ramp to them at exactly the allowed grade, so a road never dives into water and never breaks its grade limit at a bridge join.
+- Bridges: every wet stretch of a route becomes a bridge; a dry islet of a point or two inside one rides along at deck height. Seed 1 has 19 roads with bridges.
+- Numbers for seed 1: 24 roads, about 105 km in all, and every one of the 23 places is connected. Planning the whole network takes well under a second.
+- Checked: 8 new tests (the same seed gives the same network; all places connected; grades within class limits, bridge joins included; roads never in the ocean; bridges only over water, deck above it; earthworks within sanity bounds). Looked at from the air and at road level in the viewer, and on the plan map.
+- One for Chris to judge: a road bridges only the water itself, then ramps at its steepest allowed grade. Crossing a deep gorge that way means a deep real-world-style cut (up to about 65 m on seed 1), and trails, which may climb 22 percent, cross ravines on high embankments (up to about 118 m). If that looks wrong, the fix is a "viaduct rim to rim" rule that carries the deck across the whole gorge.
+- Not done: the game world does not level ground along the roads yet, the town streets do not connect to the network, and the places themselves are still not drawn in the game.
+
+## Everything on one map: roads levelled into the game, a map screen, and a better HUD (Chris)
+
+Chris asked to put the building, the roads, and the cities and towns on one map — he could not see why they lived on different URLs, and he needs to do everything in one place for testing — and asked for a better HUD, build menu and inventory system.
+- One game at / : the main game now plans the places and the road network at startup, the same way the /world/ viewer did. The viewer, the /base/ sandbox and the /lab/ page all stay as they were (nothing renamed or deleted), but testing the world now happens in the game itself.
+- Roads you can drive (src/rules/ground.ts): the ground levels itself along every road — it cuts into rises, rides banks over dips, calms the bumps near the road, and blends back to natural ground over about 9 m past the road edge. The road mesh is drawn on the levelled ground (src/render/roadView.ts).
+- Bridge decks are a separate layer called the surface: the physics world and the walker stand on it, so a deck carries you over the water while the land under the bridge keeps its natural shape. Known quirk (accepted for now): wading under a bridge reads the deck as the ground, so the deep-water block does not apply there.
+- Props (rocks and the like) keep at least 12 m off any road (src/rules/worldProps.ts).
+- Place markers (src/render/placeMarkers.ts): a pole with a coloured lamp at every place except the starting town, so there is something to drive to before the towns themselves are built.
+- Map (src/ui/mapOverlay.ts): a minimap sits top right; M opens the big map with every place named, the roads, bridges in red, a scale bar and a player arrow. Clicking the big map moves you there (a testing aid). N and [ ] reseed the world from the map screen.
+- HUD (src/ui/hud.ts): an always-visible hotbar along the bottom mirrors the inventory, with a coloured edge per kind of item. The inventory panel (Tab) is clickable: click food or drink to use it (src/rules/survival.ts consumeSlot). The build menu is restyled as a panel with cards.
+- Checked: 10 new tests (196 in all, 194 pass; the 2 failures are the old cannon-es comparison and the yard vehicles tolerance, both pre-existing). Looked at from the air, at road level, on the longest bridge, and with the inventory open; screenshots in dist/review (game-roads-air, game-map, game-road-level, game-bridge, game-hud).
+- Not done: the other towns, the city and the docks are still markers, not buildings; the town streets do not join the network yet; the viaduct rim-to-rim decision above is still open.
+
+## Smoother roads that meet the town, and a steadier coast (Chris)
+
+Chris saw the coast change as he moved the mouse, roads that followed the grid and ran through the town, and stair-stepped sea and river edges.
+- Why the coast changed with the view (Claude's diagnosis): the water was a mesh of whole grid squares laid at nearly the same height as the shore, and the depth buffer cannot tell them apart from far away, so water and ground flickered against each other depending on the angle. The sea was also an opaque plane just under the water, which hid the sand in the shallows.
+- Water now (src/render/worldView.ts): the mesh only has to cover the water and three squares beyond it. The shader reads the real ground height under each pixel and drops the pixel where the ground is above the water, so the shoreline is the smooth line where ground meets water, whatever the mesh resolution. Depth sets the colour and clarity per pixel. The water is pulled a hair toward the camera so it never flickers against the seabed. River and lake banks are muddy by smooth distance from the water, not by grid square (src/render/terrainTiles.ts).
+- The sea beyond the map is now a ring with a hole where the map is (the old plane hid the shallows). Both the game and the /world/ viewer use the same functions.
+- Rock colour used the slope at each tile's own detail, so neighbouring tiles of different detail disagreed and showed square blocks of red. Colour slope is now measured at the world's grid spacing for every tile.
+- Roads (src/rules/roads.ts): the route is still A* over the grid, but the grid path is then straightened (a straight run replaces grid steps when it costs no more than 15 percent extra, and the sea and extra water are refused), grid wiggle between close waypoints is dropped, and every corner is rounded with a tangent curve (bend radius by class: highway 90 m, road 55, dirt 32, trail 12, less where a run is short or the land forbids). The router also keeps a little off river banks, so bends round a river's end stay wide.
+- Roads meet places at gates (Claude chose): the starting town's gates are the ends of its real streets, so a road arrives along a street and meets the boundary street in a T (the north side is left out, where the junkyard is). Every other place gets eight gates on a ring at 0.6 of its radius (a dock only on the land side), for the streets of those places to open onto when they are drawn. Each road runs dead straight for 70 m out of its gate, so it arrives square. The gate is picked from a rough route centre to centre, so a road does not leave one side and double back.
+- Checked: roads tests updated and extended (the road ends at a street gate and leaves squarely; almost no tight corner, under 0.4 percent of points, hairpins are kept only where the land forces them: seed 1 has one near the same spot on two roads). Sanity bounds for how far a road may stand above or below the ground were raised (road and highway 80 to 100, trail 160 to 200) because straighter runs cross hollows more directly. Looked at from the air in three views: the coast no longer changes with the camera angle.
+- Planning the network now takes about two seconds on seed 1 (it was under one).
+- Not done: the other places still have no streets to open onto their gates; the camera near plane is still 0.1 (far water can still shimmer a little at long range, only noticed if it shows again).
+
+## Roads join each other instead of overlapping (Chris, from the reference photos)
+
+- Overlapping parallel roads flickered and folded. Now a road follows one already built (the router finds cells near existing roads 70 percent cheaper), and the new road is cut at the first point where it meets an existing road (within 10 m): a junction, like the reference photos. The stretch that ran alongside is dropped, so one road can become two pieces with the same two places. Highways are built first, so roads and dirt roads join onto them.
+- The zigzag in river gorges: the clean-up that drops grid wiggle was blocked by a strict water rule, relaxed a little. Straight runs are now checked every 4.7 m, and any point left in the sea is moved to the nearest dry ground before heights are fitted.
+- Tests: ends may now finish on another road; the road-to-ground sanity bound for road and dirt went to 110. Not done: highway-to-road ramps and lane markings, and the river banks still show some blocky colour at long range.
+
+## One road style, ordinary intersections (Chris)
+
+- Every road is now 10 m wide and one grey, whatever its class. Grade limits and routing costs still differ by class, because a single 8 percent limit left lookout trails running level while the mountain rose 200 m beside them (tall earth walls); that was tried and undone.
+- A road that meets another now ends on the other road's centreline (a T), within 16 m, with its height eased over the last 30 points. Two roads at different heights are an overpass, not a junction. The grade test skips the first and last 32 points of a road, where a junction landing eases in.
+- Still seen: two separate roads can run side by side more than 16 m apart on a hairpin, and no lane markings or turn lanes.

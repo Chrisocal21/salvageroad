@@ -1,3 +1,4 @@
+import { worldMaterial } from './worldMaterials';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CONTAINERS } from '../data/containers';
@@ -5,7 +6,7 @@ import { makeRandom } from '../rules/scatter';
 import { ROAD, STORE, type Building, type ContainerSpawn, type Town } from '../rules/town';
 import { createJunkyardView } from './junkyard';
 
-// The town: flat dark streets, plain buildings as boxes, stores you can walk into (shop front with windows, a sign,
+// The town: asphalt streets, brick buildings, stores you can walk into (shop front with windows, a sign,
 // an awning, shelves stocked with goods), small coloured boxes for the containers outside, and the junkyard.
 export interface TownView {
   group: THREE.Group;
@@ -17,7 +18,7 @@ export function createTownView(town: Town, groundY = 0): TownView {
   const group = new THREE.Group();
   group.position.y = groundY; // the town stands on level ground at this height
 
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3d, roughness: 1 });
+  const roadMat = worldMaterial('asphalt', { color: 0x888888 });
   const length = town.roadsX[town.roadsX.length - 1] - town.roadsX[0] + ROAD;
   const addRoad = (x: number, z: number, w: number, d: number) => {
     const road = new THREE.Mesh(new THREE.PlaneGeometry(w, d), roadMat);
@@ -34,7 +35,7 @@ export function createTownView(town: Town, groundY = 0): TownView {
   const driveLength = town.roadsZ[0] - ROAD / 2 - (yard.z + yard.hz) + 0.5;
   addRoad(yard.gateX, yard.z + yard.hz + driveLength / 2 - 0.5, 6, driveLength);
 
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0x4a4440, roughness: 1 });
+  const roofMat = worldMaterial('asphalt', { color: 0x77716b });
   for (const b of town.buildings) {
     if (b.store) {
       group.add(createStore(b, roofMat));
@@ -42,12 +43,15 @@ export function createTownView(town: Town, groundY = 0): TownView {
     }
     const wall = new THREE.Mesh(
       new THREE.BoxGeometry(b.hx * 2, b.height, b.hz * 2),
-      new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.9 }),
+      worldMaterial(b.color === 0x9aa6a8 ? 'brick-1' : b.color === 0xa88a7a ? 'brick-2' : 'brick-red', { color: 0xe4d9c7 }),
     );
     wall.position.set(b.x, b.height / 2, b.z);
+    wall.castShadow = true;
     group.add(wall);
+    group.add(buildingDetails(b));
     const roof = new THREE.Mesh(new THREE.BoxGeometry(b.hx * 2 + 0.4, 0.3, b.hz * 2 + 0.4), roofMat);
     roof.position.set(b.x, b.height + 0.15, b.z);
+    roof.castShadow = true;
     group.add(roof);
   }
 
@@ -61,7 +65,7 @@ export function createTownView(town: Town, groundY = 0): TownView {
     }
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(c.hx * 2, c.height, c.hz * 2),
-      new THREE.MeshStandardMaterial({ color: CONTAINERS[c.kind].color, roughness: 0.8 }),
+      worldMaterial('wood', { color: CONTAINERS[c.kind].color }),
     );
     mesh.position.set(c.x, c.height / 2, c.z);
     group.add(mesh);
@@ -93,12 +97,14 @@ function createStore(b: Building, roofMat: THREE.Material): THREE.Group {
   const h = b.height;
   const t = STORE.wall;
   const door = STORE.doorHalf;
-  const wallMat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.9 });
-  const trimMat = new THREE.MeshStandardMaterial({ color: 0x3b3a38, roughness: 0.7, metalness: 0.3 });
+  const wallMat = worldMaterial(b.color === 0x9aa6a8 ? 'brick-1' : b.color === 0xa88a7a ? 'brick-2' : 'brick-red', { color: 0xe4d9c7 });
+  const trimMat = worldMaterial('metal', { color: 0x65615a, roughness: 0.7, metalness: 0.3 });
   const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x9fb7c2, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.3, depthWrite: false });
   const box = (m: THREE.Material, sx: number, sy: number, sz: number, x: number, y: number, z: number) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m);
     mesh.position.set(x, y, z);
+    mesh.castShadow = m !== glassMat;
+    mesh.receiveShadow = true;
     store.add(mesh);
     return mesh;
   };
@@ -120,12 +126,13 @@ function createStore(b: Building, roofMat: THREE.Material): THREE.Group {
   box(wallMat, door * 2, h - 2.3, t, 0, (2.3 + h) / 2, d - t / 2); // over the door
   for (const s of [-1, 1]) box(trimMat, 0.08, 2.3, t + 0.04, s * door, 1.15, d - t / 2);
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(w * 2 - t * 2, d * 2 - t * 2), new THREE.MeshStandardMaterial({ color: 0x8c8a82, roughness: 0.85 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(w * 2 - t * 2, d * 2 - t * 2), worldMaterial('concrete', { color: 0x8c8a82 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0.04;
   store.add(floor);
   const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 2 + 0.4, 0.3, d * 2 + 0.4), roofMat);
   roof.position.y = h + 0.15;
+  roof.castShadow = true;
   store.add(roof);
 
   // Sign over the door, and a striped awning over the window line.
@@ -219,4 +226,42 @@ function createShelf(c: ContainerSpawn, store: Building): { group: THREE.Group; 
       stock.visible = false;
     },
   };
+}
+
+/** Recessed-looking windows and masonry trim give the solid background buildings scale. */
+function buildingDetails(b: Building): THREE.Group {
+  const group = new THREE.Group();
+  group.position.set(b.x, 0, b.z);
+  const trim = worldMaterial('concrete', { color: 0xaca28e });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x24302e, roughness: 0.36, metalness: 0.18 });
+  const frame = worldMaterial('metal', { color: 0x6d6c61 });
+  const pieces = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const box = (material: THREE.Material, sx: number, sy: number, sz: number, x: number, y: number, z: number, yaw: number) => {
+    const geometry = new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z).rotateY(yaw);
+    const batch = pieces.get(material) ?? []; batch.push(geometry); pieces.set(material, batch);
+  };
+  for (let face = 0; face < 4; face++) {
+    const yaw = face * Math.PI / 2;
+    const width = (face % 2 ? b.hz : b.hx) * 2;
+    const depth = face % 2 ? b.hx : b.hz;
+    box(trim, width + 0.06, 0.22, 0.10, 0, 0.13, depth, yaw);
+    box(trim, width + 0.12, 0.16, 0.14, 0, b.height - 0.18, depth, yaw);
+    const count = Math.max(1, Math.floor((width - 1.0) / 3));
+    for (let i = 0; i < count; i++) {
+      const x = (i - (count - 1) / 2) * 2.8;
+      const y = Math.min(1.95, b.height * 0.56);
+      box(frame, 1.34, 1.40, 0.09, x, y, depth + 0.045, yaw);
+      box(dark, 1.20, 1.24, 0.025, x, y, depth + 0.10, yaw);
+      box(frame, 0.045, 1.25, 0.035, x, y, depth + 0.12, yaw);
+      box(frame, 1.20, 0.045, 0.035, x, y, depth + 0.12, yaw);
+      box(trim, 1.49, 0.10, 0.23, x, y - 0.73, depth + 0.07, yaw);
+      box(trim, 1.48, 0.12, 0.12, x, y + 0.76, depth + 0.04, yaw);
+    }
+  }
+  for (const [material, geometries] of pieces) {
+    const mesh = new THREE.Mesh(mergeGeometries(geometries)!, material);
+    mesh.castShadow = mesh.receiveShadow = true; group.add(mesh);
+    geometries.forEach(g => g.dispose());
+  }
+  return group;
 }

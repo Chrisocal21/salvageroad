@@ -15,8 +15,11 @@ Built:
 - Hunger and thirst, an inventory, an HTML HUD, a fly mode and a jump-to-town key for testing.
 - Shipping containers: a real model, a snap grid with a support rule and pillars, and putting them down by hand from a truck in first person. One container stands in the junkyard.
 - A plan of places for any island: a city, towns, villages, an industrial yard, outposts, lookouts and two docks far apart. Not drawn in the game yet.
+- A road network plan for any island: highways join the city, towns, industrial yard and docks, roads join the villages, dirt roads the outposts, trails the lookouts, with bridges over water. Drawn in the /world/ viewer; the game world does not level or use it yet.
 
-Not built yet: roads, highways, dirt roads, trails and bridges (waiting for Chris); the other towns and the docks drawn in the world; the big rig and the flatbed trailer; hauling containers from the world; fuel; restoring the paint; trees and shrubs; traders, hunting and the CDs; saving the game (only the base is saved); co-op.
+Roads and water (added): one road style (10 m wide, one grey) joining every place, smoothed into long straight runs and bends, meeting the starting town along its own streets and meeting each other in T intersections; the coast and river edges are smooth and no longer change with the camera angle.
+
+Not built yet: loading a container onto the truck from the yard or docks (press U to unload only works once cargo is on the truck); lane markings; the other towns and the docks drawn in the world; the big rig and the flatbed trailer; hauling containers from the world; fuel; restoring the paint; trees and shrubs; traders, hunting and the CDs; saving the game (only the base is saved); co-op.
 
 ## The game in one line
 

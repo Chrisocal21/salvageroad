@@ -1,3 +1,4 @@
+import { createYardTire } from './yardTire';
 import * as THREE from 'three';
 import type { PartKind } from '../rules/carParts';
 import type { ElCajonModel } from './elCajon';
@@ -57,9 +58,8 @@ export function partSize(model: THREE.Object3D): number {
 export function createRigTire(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'big rig tire';
-  const rubber = new THREE.MeshStandardMaterial({ color: 0x1c1d1f, roughness: 0.95 });
   const steel = new THREE.MeshStandardMaterial({ color: 0x8a8f94, roughness: 0.5, metalness: 0.6 });
-  const tyre = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.16, 14, 32).rotateX(Math.PI / 2), rubber);
+  const tyre = createYardTire(0.52, 0.30);
   tyre.position.y = 0.16;
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.05, 20), steel);
   hub.position.y = 0.2;

@@ -1,6 +1,7 @@
+import { worldMaterial } from './worldMaterials';
 import * as THREE from 'three';
 import type { Ground } from '../rules/ground';
-import { NO_WATER, type WorldMap } from '../rules/world';
+import { groundHeight, type WorldMap } from '../rules/world';
 import { groundColourAt } from './worldView';
 
 // The drawn ground, as square tiles of 64 x 64 cells. Near the camera the tiles are small and fine (2 m between
@@ -68,7 +69,7 @@ export class TerrainTiles {
   readonly group = new THREE.Group();
   private tiles = new Map<string, Tile>();
   private index = sharedIndex();
-  private material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+  private material = worldMaterial('terrain', { vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
   private frame = 0;
   private color = new THREE.Color();
   /** How many tiles are drawn right now, and how many have been built and kept. */
@@ -122,9 +123,13 @@ export class TerrainTiles {
         const len = Math.hypot(dx, 2 * cell, dz);
         const x = x0 + c * cell;
         const z = z0 + r * cell;
-        const slope = Math.hypot(dx, dz) / (2 * cell);
-        const wetIdx = this.nearestVertex(x, z);
-        const wet = this.map.water[wetIdx] !== NO_WATER && this.map.water[wetIdx] > 0.5;
+        // The colour's slope is measured at the world's own grid spacing, whatever the tile's detail, so a tile
+        // and its coarser neighbour agree on where the rock starts and no seams show between them.
+        const sp = this.map.spacing;
+        const slope = Math.hypot(groundHeight(this.map, x - sp, z) - groundHeight(this.map, x + sp, z), groundHeight(this.map, x, z - sp) - groundHeight(this.map, x, z + sp)) / (2 * sp);
+        // Muddy where the ground is within a metre or two of a river's or lake's own surface, fading out smoothly.
+        const lvl = this.waterNear(x, z);
+        const wet = lvl > 0.5 ? 1 - Math.min(1, Math.max(0, (h - lvl + 0.5) / 2)) : 0;
         groundColourAt(this.map, x, z, h, slope, wet, this.color);
         const v = r * stride + c;
         put(v, x, h, z, dx / len, (2 * cell) / len, dz / len, this.color);
@@ -151,11 +156,13 @@ export class TerrainTiles {
     return tile;
   }
 
-  private nearestVertex(x: number, z: number): number {
+  /** The highest water surface at the four grid points round a position, or NO_WATER. */
+  private waterNear(x: number, z: number): number {
     const m = this.map;
-    const col = Math.min(m.n - 1, Math.max(0, Math.round((x + m.half) / m.spacing)));
-    const row = Math.min(m.n - 1, Math.max(0, Math.round((z + m.half) / m.spacing)));
-    return row * m.n + col;
+    const col = Math.min(m.n - 2, Math.max(0, Math.floor((x + m.half) / m.spacing)));
+    const row = Math.min(m.n - 2, Math.max(0, Math.floor((z + m.half) / m.spacing)));
+    const i = row * m.n + col;
+    return Math.max(m.water[i], m.water[i + 1], m.water[i + m.n], m.water[i + m.n + 1]);
   }
 
   /** Distance from a point to a tile (nearest edge, with the camera height as the vertical distance). */

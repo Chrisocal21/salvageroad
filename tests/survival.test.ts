@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addItem, countItem, createInventory } from '../src/rules/inventory';
-import { consume, createSurvival, isWeak, stepSurvival, SURVIVAL } from '../src/rules/survival';
+import { consume, consumeSlot, createSurvival, isWeak, stepSurvival, SURVIVAL } from '../src/rules/survival';
 
 describe('survival', () => {
   it('drains with time and never goes below zero', () => {
@@ -62,5 +62,24 @@ describe('survival', () => {
     expect(consume(s, inv, 'drink')).toMatchObject({ itemId: 'water_bottle' });
     expect(s.thirst).toBe(60);
     expect(s.hunger).toBe(10);
+  });
+
+  it('consumeSlot uses the item in that slot, and refuses others', () => {
+    const s = { hunger: 50, thirst: 50 };
+    const inv = createInventory();
+    addItem(inv, 'wrench', 1);
+    addItem(inv, 'soda', 2);
+    // Slot 0 is the wrench: not edible.
+    expect(consumeSlot(s, inv, 0)).toEqual({ ok: false, reason: 'inedible' });
+    expect(countItem(inv, 'wrench')).toBe(1);
+    // Slot 1 is soda: drinks one.
+    expect(consumeSlot(s, inv, 1)).toEqual({ ok: true, itemId: 'soda', restored: 25 });
+    expect(s.thirst).toBe(75);
+    expect(countItem(inv, 'soda')).toBe(1);
+    // An empty slot does nothing.
+    expect(consumeSlot(s, inv, 5)).toEqual({ ok: false, reason: 'none' });
+    // A full bar refuses.
+    expect(consumeSlot({ hunger: 100, thirst: 100 }, inv, 1)).toEqual({ ok: false, reason: 'full' });
+    expect(countItem(inv, 'soda')).toBe(1);
   });
 });

@@ -95,6 +95,7 @@
   background: var(--panel);
   border: 1px solid var(--edge);
   border-radius: 8px;
+  pointer-events: auto; /* open with the mouse free: slots can be clicked */
 }
 .hud-inventory-title {
   display: flex;
@@ -118,12 +119,21 @@
   padding: 6px 8px;
   font-size: 13px;
   border: 1px solid var(--edge);
+  border-left: 3px solid transparent; /* item kind colour, set inline */
   border-radius: 5px;
   background: rgba(255, 255, 255, 0.03);
 }
 .hud-slot.empty {
   border-style: dashed;
   background: none;
+}
+.hud-slot.usable {
+  cursor: pointer;
+}
+.hud-slot.usable:hover {
+  border-color: var(--accent);
+  border-left-color: var(--accent) !important;
+  background: rgba(224, 176, 96, 0.08);
 }
 .hud-slot-count {
   position: absolute;
@@ -182,6 +192,45 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }
 
+/* The hotbar: what you carry, always along the bottom centre. Display only. */
+.hud-hotbar {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+}
+.hud-hotbar-slot {
+  position: relative;
+  width: 58px;
+  height: 40px;
+  padding: 3px 4px;
+  border: 1px solid var(--edge);
+  border-top: 3px solid transparent; /* item kind colour, set inline */
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+.hud-hotbar-slot.empty {
+  border-style: dashed;
+  border-top-style: solid;
+  background: none;
+}
+.hud-hotbar-name {
+  display: block;
+  font-size: 9.5px;
+  line-height: 1.25;
+  color: rgba(236, 232, 223, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .hud-debug {
   position: absolute;
   left: 8px;
@@ -236,20 +285,24 @@
   color: #e8a090;
 }
 
-/* Build bar: shown in build mode, at the bottom centre. */
+/* Build menu: shown while unloading the truck, at the bottom centre above the hotbar. */
 .hud-build {
   position: absolute;
   left: 50%;
-  bottom: 52px;
+  bottom: 66px;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
 }
 .hud-build-status {
   padding: 5px 12px;
-  background: var(--panel);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--edge);
   border-radius: 6px;
   color: #a8e6b6;
@@ -260,21 +313,25 @@
 }
 .hud-build-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 .hud-build-item {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  background: var(--panel);
+  gap: 5px;
+  min-width: 86px;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--edge);
-  border-radius: 6px;
+  border-radius: 8px;
   white-space: nowrap;
+  opacity: 0.6;
 }
 .hud-build-item.on {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 2px 12px rgba(224, 176, 96, 0.25);
+  opacity: 1;
 }
 .hud-build-key {
   min-width: 18px;
@@ -292,7 +349,7 @@
 }
 .hud-build-title {
   font-size: 12px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dim);
 }

@@ -1,3 +1,4 @@
+import { worldMaterial } from './worldMaterials';
 import * as THREE from 'three';
 import type { Prop } from '../rules/scatter';
 
@@ -16,8 +17,10 @@ export function createProps(props: Prop[], groundHeight: (x: number, z: number) 
     list: Prop[],
     place: (p: Prop, groundY: number, m: THREE.Matrix4) => void,
   ) => {
-    const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: 0.9 }), Math.max(1, list.length));
+    const mesh = new THREE.InstancedMesh(geometry, worldMaterial(color === 0x5a4330 ? 'bark' : color === 0x9a7b4f ? 'wood' : color === 0x8d7a66 ? 'rock' : 'grass', { color, roughness: 0.9 }), Math.max(1, list.length));
     mesh.count = list.length;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     const m = new THREE.Matrix4();
     list.forEach((p, i) => {
       place(p, groundHeight(p.x, p.z), m);
