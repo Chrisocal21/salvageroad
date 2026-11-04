@@ -6,6 +6,20 @@
 
 ---
 
+## Where This Stands (November 4, 2026)
+
+This file is the EARLY plan, written before any code. The game has since moved on, and docs/SALVAGE_ROAD_CONCEPT.md is the current concept: where they disagree, the concept wins. Sections below are kept as written, with notes where reality has changed.
+
+What changed since this was written:
+- **Built and playable at localhost:3000:** a drivable El Cajon (Rapier physics, realistic feel), a 12 km generated island with rivers, lakes and desert, a desert start with the town hidden behind a dune, a town with walk-in stores, hunger and thirst, an HTML HUD, and a fly mode for testing.
+- **The El Cajon is no longer found beat-up.** It is a rusty stripped shell in a junkyard, rebuilt from 18 loose pieces with a wrench. Its doors, hood and tailgate open, it has a passenger seat, and its bed is a 24 slot store that shows what is in it.
+- **The pop-up bench was dropped as the core.** Base building from shipping containers took its place: containers are hauled by a big rig and flatbed trailer, and put down by hand in first person on a snap grid. The /base/ page is the builder sandbox.
+- **Refuges became five traders** across the map, and a paid Steam release replaced "free browser game".
+- **Next in the world:** a plan of places and two docks exists (not drawn yet). Roads, highways, dirt roads, trails and bridges are next, when Chris says. Trees and shrubs come after, from Chris's asset folders.
+- Progress by item is in ROADSURVIVAL_PROGRESS_TRACKER.md. Every decision is in DECISIONS_LOG.md.
+
+---
+
 ## The Idea
 
 You start on foot in a town. You find a vehicle, loot the town, and build the vehicle up. Then you drive to the next location, scavenging scraps along the roadside, eating and drinking to survive, hunting and fishing for food, and doing quests. You can bring up to 3 friends.
@@ -130,9 +144,10 @@ You start on foot in a town. You find a vehicle, loot the town, and build the ve
 |---|---|---|
 | Language and build | TypeScript + Vite | Chris's default stack |
 | 3D rendering | Three.js | Free, browser 3D, already familiar from Supplyline |
-| Vehicle and world physics | A browser physics library (Rapier or cannon-es to evaluate) | Needed for drivable vehicle feel |
-| Textures | Free CC0 sources such as Poly Haven, license checked | Believable surfaces at no cost |
-| Saves | Browser local storage | Single-player needs no backend |
+| Vehicle and world physics | Rapier (chosen; cannon-es was compared and is kept only at /lab) | Needed for drivable vehicle feel |
+| Textures | Free CC0 sources such as Poly Haven, license checked. So far the game draws everything procedurally (the rust is a shader); the shipping container model is the only imported asset, and its licence is unknown | Believable surfaces at no cost |
+| Saves | Browser local storage (only the base is saved so far) | Single-player needs no backend |
+| Tests | Vitest, including a simulated browser page for the HUD | Rules are plain TypeScript, so they test without a browser |
 | Co-op rooms (Phase 3) | Cloudflare Workers with Durable Objects, to evaluate | Fits Chris's stack and room-code style joining |
 | Deploy | Vercel | Static build, share by link |
 | Version control | Git + GitHub | Always |
@@ -154,15 +169,15 @@ You start on foot in a town. You find a vehicle, loot the town, and build the ve
 
 **Goal:** prove the stop-and-work rhythm feels good with rough placeholder art. Driving, looting, and the pop-up bench are the three things everything else depends on.
 
-- One drivable El Cajon with feel-good physics
-- One small generated stretch of terrain and one generated town
-- Walk in first person, loot containers, carry items
-- Enter and exit the vehicle
-- Deploy a bench from the bed, craft one thing, pack it away
-- A hunger meter that creates a reason to stop
-- A quick browser performance check with generated terrain and loot, judged against a mid-range laptop
+- One drivable El Cajon with feel-good physics (done)
+- One small generated stretch of terrain and one generated town (done; the terrain is now a 12 km island)
+- Walk in first person, loot containers, carry items (done)
+- Enter and exit the vehicle (done)
+- Deploy a bench from the bed, craft one thing, pack it away (NOT built: base building from shipping containers replaced it)
+- A hunger meter that creates a reason to stop (done, with thirst)
+- A quick browser performance check with generated terrain and loot, judged against a mid-range laptop (done at 300 props: 144 fps; not re-measured since the world grew)
 
-Nothing else gets built until Step Zero holds up. The first stages are written up in ROADSURVIVAL_STEP_ZERO_HANDOFF.md for the coding Claude.
+Step Zero held up and the project moved past it. The first stages are written up in ROADSURVIVAL_STEP_ZERO_HANDOFF.md for the coding Claude.
 
 ---
 

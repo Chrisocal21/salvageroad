@@ -24,10 +24,12 @@ export interface ContainerState {
   kind: ContainerKind;
   opened: boolean;
   contents: ItemStack[];
+  /** Contents set by the world rather than rolled, such as the junkyard's wrench. */
+  fixed?: ItemStack[];
 }
 
-export function newContainerState(kind: ContainerKind): ContainerState {
-  return { kind, opened: false, contents: [] };
+export function newContainerState(kind: ContainerKind, fixed?: ItemStack[]): ContainerState {
+  return { kind, opened: false, contents: [], fixed };
 }
 
 export interface OpenResult {
@@ -43,7 +45,9 @@ export interface OpenResult {
 export function openContainer(state: ContainerState, seed: number, containerId: number, inv: Inventory): OpenResult {
   if (!state.opened) {
     state.opened = true;
-    state.contents = rollLoot(CONTAINERS[state.kind], makeRandom(Math.imul(seed, 7919) ^ Math.imul(containerId + 1, 104729)));
+    state.contents = state.fixed
+      ? state.fixed.map((s) => ({ ...s }))
+      : rollLoot(CONTAINERS[state.kind], makeRandom(Math.imul(seed, 7919) ^ Math.imul(containerId + 1, 104729)));
   }
   const wasEmpty = state.contents.length === 0;
   const taken: ItemStack[] = [];

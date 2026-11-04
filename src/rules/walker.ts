@@ -9,7 +9,7 @@ export const WALKER = {
   runSpeed: 6, // m/s
   eyeHeight: 1.7,
   maxPitch: 1.4, // radians up or down
-  worldLimit: 190, // m from the origin: the edge of the generated terrain
+  worldLimit: 5950, // m from the origin: just inside the edge of the world
 };
 
 export interface Walker {

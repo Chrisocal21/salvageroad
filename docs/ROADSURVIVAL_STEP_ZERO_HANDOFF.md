@@ -2,6 +2,15 @@
 
 Written 2026-11-02, updated the same day with the performance target. Hand this file to the coding Claude in VS Code, in a brand new empty project folder.
 
+## Status (updated November 4, 2026): this handoff is done
+
+Everything below is kept as it was written, for the record. What happened to it:
+- Stages 1 to 5 (look around, set up the repo, compare physics, drive, performance baseline) are finished. Chris chose Rapier and a realistic driving feel, and the performance check passed on the dev laptop (see DECISIONS_LOG.md for the numbers).
+- The rest of Step Zero was built too: a generated town with looting, first-person walking, entering and leaving the truck, a HUD in HTML, and hunger and thirst. The pop-up bench (item 5 of the list below) was never built; base building from shipping containers replaced it.
+- The "Not specified" list: the mid-range laptop is the dev laptop (Ryzen 5 7535HS, integrated Radeon); the HUD is HTML; the keys are WASD and Space (a gamepad is still open); driving is realistic; the driving camera is a provisional chase camera (still open); the art budget is still open.
+- "Do not add real art" is relaxed: the El Cajon has a detailed procedural model with a rust shader, and the shipping container is a real model. Chris has folders of building, land, tree and shrub assets to use later, once their licences are known (ASSET_LICENSES.md).
+- The newer concept is docs/SALVAGE_ROAD_CONCEPT.md. Progress is tracked in ROADSURVIVAL_PROGRESS_TRACKER.md.
+
 ## Read this first
 
 The person who wrote this file (a planning chat) has NOT seen any code. There is no repo yet. This file states Chris's goals and decisions. You, the coding Claude, can see the real folder and machine, so you decide the specifics and tell Chris what you find.

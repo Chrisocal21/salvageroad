@@ -85,3 +85,36 @@ describe('hud', () => {
     expect(q('.hud-debug').hidden).toBe(true);
   });
 });
+
+describe('hud build bar', () => {
+  it('shows the menu, the selected item, the level and the status, and hides on leaving build mode', () => {
+    const { hud, q } = setup();
+    expect(q('.hud-build').hidden).toBe(true);
+    hud.setBuild({ items: [{ name: '20 ft container', selected: false }, { name: 'Support pillar', selected: true }], level: 2, status: 'Level 2  +4 pillars', ok: true });
+    expect(q('.hud-build').hidden).toBe(false);
+    expect(document.querySelectorAll('.hud-build-item')).toHaveLength(2);
+    expect(q('.hud-build-item.on').textContent).toContain('Support pillar');
+    expect(q('.hud-build-level').textContent).toContain('2');
+    expect(q('.hud-build-status').classList.contains('bad')).toBe(false);
+    hud.setBuild({ items: [], level: 0, status: 'The truck is in the way', ok: false });
+    expect(q('.hud-build-status').classList.contains('bad')).toBe(true);
+    hud.setBuild(null);
+    expect(q('.hud-build').hidden).toBe(true);
+  });
+
+  it('shows the vehicle storage beside the pack and moves a clicked stack across', () => {
+    const { hud, q } = setup();
+    const pack = createInventory();
+    const store = createInventory(4);
+    addItem(pack, 'wrench', 1);
+    const moves: [string, number][] = [];
+    expect(hud.isStorageOpen()).toBe(false);
+    hud.openStorage('El Cajon bed', store, pack, (from, i) => moves.push([from, i]));
+    expect(hud.isStorageOpen()).toBe(true);
+    expect(q('.hud-storage').textContent).toContain('El Cajon bed');
+    (document.querySelector('.hud-storage .hud-slot.full') as HTMLElement).click();
+    expect(moves).toEqual([['pack', 0]]);
+    hud.closeStorage();
+    expect(q('.hud-storage').hidden).toBe(true);
+  });
+});

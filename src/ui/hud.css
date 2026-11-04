@@ -133,6 +133,39 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+.hud-storage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: min(640px, 92vw);
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  pointer-events: auto;
+}
+.hud-storage .hud-slots {
+  grid-template-columns: repeat(4, 1fr);
+}
+.hud-storage .hud-slot {
+  min-height: 44px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.hud-storage .hud-inventory-hint {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+.hud-slot.full {
+  cursor: pointer;
+}
+.hud-slot.full:hover {
+  border-color: var(--accent);
+}
 .hud-inventory-hint {
   margin-top: 10px;
   color: var(--dim);
@@ -201,4 +234,69 @@
 }
 .hud-need.low {
   color: #e8a090;
+}
+
+/* Build bar: shown in build mode, at the bottom centre. */
+.hud-build {
+  position: absolute;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.hud-build-status {
+  padding: 5px 12px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  color: #a8e6b6;
+  white-space: nowrap;
+}
+.hud-build-status.bad {
+  color: #ffa89a;
+}
+.hud-build-row {
+  display: flex;
+  gap: 6px;
+}
+.hud-build-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.hud-build-item.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.hud-build-key {
+  min-width: 18px;
+  padding: 0 5px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a1d1e;
+  background: var(--accent);
+  border-radius: 3px;
+}
+.hud-build-level {
+  font-size: 12px;
+  color: var(--dim);
+}
+.hud-build-title {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+/* While the build bar is up, toasts sit above it instead of on top of its status line. */
+.hud:has(.hud-build:not([hidden])) .hud-toast {
+  bottom: 30%;
 }

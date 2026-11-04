@@ -4,6 +4,162 @@
 
 ---
 
+## Salvage Road -- Session 4 -- 2026-11-04
+
+**Status:** Active. Written by the coding Claude from DECISIONS_LOG.md; the concept itself is in docs/SALVAGE_ROAD_CONCEPT.md.
+
+---
+
+### What We Decided
+
+- A new concept replaced parts of the early plan: the player is a lone mechanic with no home, rebuilds a wrecked truck, hauls shipping containers from the docks with a big rig and flatbed trailer, and builds a compound anywhere. Paid Steam game, browser first, wrapped in Electron later
+- The pop-up bench is no longer the core mechanic. Base building from shipping containers is
+- Containers are not placed from a build menu. They are moved by hand: pull up, press U, aim in first person, see a ghost of where it lands, click. Dropped containers snap to a grid with a support rule and pillars
+- The tow truck became a big rig plus a flatbed trailer. Vehicles can be left by the road and used as storage
+- The world comes first, one piece at a time, and Chris says "next" between pieces
+- The player wakes in the desert. The town is hidden behind a small hill, so they have to move to see it. Food and water are in boxes and in some store fronts
+- The El Cajon is found in a junkyard in the town, rusty and stripped, with its parts lying about. The player puts it back together. Restoring the paint (grind, paint, buff) is recorded but not built
+- Fly mode for testing. Doors, hood, tailgate and a passenger seat. Storage in the truck bed that shows what is in it, becoming a crate of supplies when there is a lot
+- Tyres stacked in the yard. A big rig tyre to find and keep (the game tells the player to keep it)
+- One shipping container stands in the junkyard, to haul later. Two docks at least. Roads, highways, dirt roads, trails and bridges come after the places, and only when Chris says
+
+---
+
+### What Was Learned
+
+- zombiesiege is a completely different game: nothing is taken from it
+- A base built on the /base/ test page showed up in the game because both used one browser save. They now have separate saves, and the game always starts with no containers
+- The truck's doorway showed stray trim after the doors opened. Three separate pieces had to move with the door (the belt crease and mirror, the top cap, and the body's top shoulder). Colouring each group a different colour showed which piece was left behind
+- Chris prefers to see a thing look wrong and say so; the log of fixes is in DECISIONS_LOG.md
+
+---
+
+### What Changed
+
+- Built: the shipping container builder (/base/), the real container model with level of detail, first-person unloading in the main game, a 12 km island generator with rivers, lakes and desert (/world/), detailed walkable and drivable ground, one game with the desert start and hidden town, walk-in stores, the rusty El Cajon in a junkyard rebuilt from 18 pieces, doors and hood and tailgate that open, passenger seat, bed storage with visible load, the big rig tyre, one yard container, and a plan of places and two docks
+- Not built: roads and highways (a prototype was written, set aside at Chris's request, and kept outside the project), the big rig, the trailer, hauling containers, fuel, saving the game, trees and shrubs
+- The earlier tracker, feature map and handoff were out of date. They are updated in this session
+
+---
+
+### Open Questions Added
+
+- How many shipping containers across the map (about 150 is recommended)
+- Should some truck parts be found outside the junkyard, and does the truck need fuel
+- Where tires and motors really come from
+- What is under the hood to use, and whether goods in the bed can fall out
+- Which tools and how much paint are needed to restore the paint
+- What each fleet vehicle is for, what each trader buys and sells, whether there is ranching
+- Where the container model, the trees and the other assets in Chris's folders came from, and their licences
+
+---
+
+### Open Questions Closed
+
+- Physics library: Rapier
+- Canvas or HTML for the HUD: HTML
+- How the driving should feel: realistic, not arcade
+- Single-player first or co-op first: single-player first, built for co-op
+- Free browser game or paid: paid Steam release
+- Whether a pop-up bench is the core: no, base building is
+- How containers get placed: by hand from a truck, snapped to the grid, with the support rule
+- Whether dropped containers follow the grid and support rules: yes
+
+---
+
+### Progress Updates
+
+- Overall about 44% of the tracker's items. Pre-production 11 of 11. Step Zero 7 of 8 (no bench, by design)
+- 176 tests, 175 pass. The one failure is the old cannon-es ramp comparison, not used by the game
+
+---
+
+### Documents Updated
+
+- ROADSURVIVAL_PROGRESS_TRACKER.md — rewritten to match what is built
+- ROADSURVIVAL_PROJECT_LOG.md — sessions 3 and 4 added
+- ROADSURVIVAL_OPEN_QUESTIONS.md — answered, still open, and new
+- ROADSURVIVAL_FEATURE_MAP.md — status note and tools
+- ROADSURVIVAL_STEP_ZERO_HANDOFF.md — status note
+- SALVAGE_ROAD_CONCEPT.md — where the build stands, and the late updates tidied
+- DECISIONS_LOG.md — a current-state summary at the top
+- ASSET_LICENSES.md — unused asset folders noted
+
+---
+
+### Next Session
+
+Chris's call: roads, highways, dirt roads, trails and bridges, or drawing the places in the world, or trees and shrubs from the asset folders. Confirm the container count first.
+
+---
+
+## Salvage Road -- Session 3 -- 2026-11-02
+
+**Status:** Active. Written by the coding Claude from DECISIONS_LOG.md.
+
+---
+
+### What We Decided
+
+- The test machine is the dev laptop: Ryzen 5 7535HS, 31 GB RAM, and the integrated Radeon in the browser (the RX 6550M is not used unless Chrome is pointed at it)
+- Physics library: Rapier. Chris drove both libraries; Rapier cleared the ramp and the cannon-es comparison stays only at /lab
+- Driving feel: realistic, like a real car. WASD to drive, Space is the handbrake
+- The HUD and menus are HTML drawn over the canvas, behind one small interface so it can be swapped later
+- The repo layout: src/rules for plain game rules, src/render for Three.js, src/data for content as data, src/ui for the HUD, tests, docs
+
+---
+
+### What Was Learned
+
+- The cannon-es truck stopped randomly because of an infinite ground plane, not the library. Swapping it for a big flat box fixed it
+- The truck bounced because Rapier's default suspension damping was far too low for it. Raised, with a test to guard it
+- The whole world seemed to shake at top speed because physics runs at 60 steps a second while the screen draws 144. The truck is now drawn blended between physics steps, and the camera is rigidly attached
+- On the integrated Radeon the scene held 144 fps at 4 times the pixels and dropped to 80 fps at 9 times, so there is roughly five times spare GPU room at 1080p. That is an upper bound for plain scenes, not a promise once real art arrives
+- A much more detailed truck model appeared on disk that Claude did not write; it was kept
+
+---
+
+### What Changed
+
+- Built in order: the repo and toolchain, the physics comparison, the drivable El Cajon with mouse look, a generated 400 m terrain and 300 props with a performance run (B), a generated town with lootable containers, first-person walking, enter and exit the truck, a 12 slot inventory, the HTML HUD (crosshair, prompts, toast, inventory panel, speedometer), and hunger and thirst with F to eat and Q to drink
+- Nothing lethal: an empty bar only slows walking
+
+---
+
+### Open Questions Added
+
+- Should an empty hunger bar hurt or kill the player
+
+---
+
+### Open Questions Closed
+
+- Which physics library: Rapier
+- Canvas or HTML for the HUD: HTML
+- What machine counts as the mid-range laptop: the dev laptop above
+- Keyboard layout: WASD, Space (a gamepad is still open)
+- How heavy the driving should feel: realistic
+
+---
+
+### Progress Updates
+
+- Pre-production 11 of 11. Step Zero stages 1 to 6 built; the bench was never built
+
+---
+
+### Documents Updated
+
+- DECISIONS_LOG.md — created, with the physics comparison and every stage
+
+---
+
+### Next Session
+
+Chris brings a new concept (see Session 4).
+
+---
+
 ## Salvage Road -- Session 2 -- 2026-11-01 (ran past midnight into 2026-11-02)
 
 **Status:** Active

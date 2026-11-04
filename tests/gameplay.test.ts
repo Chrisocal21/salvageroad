@@ -13,7 +13,9 @@ import {
 } from '../src/rules/inventory';
 import { newContainerState, openContainer, rollLoot } from '../src/rules/loot';
 import { makeRandom } from '../src/rules/scatter';
-import { boxesOverlap, generateTown, LOT, ROAD } from '../src/rules/town';
+import { PARTS, PART_KINDS } from '../src/rules/carParts';
+import { pieceBox } from '../src/rules/baseWorld';
+import { boxesOverlap, generateTown, LOT, reachableContainers, ROAD, storeAt, storeInterior, storeWalls, YARD } from '../src/rules/town';
 import { lookWalker, stepWalker, WALKER, type Walker } from '../src/rules/walker';
 
 describe('data', () => {
@@ -144,8 +146,21 @@ describe('town', () => {
   });
 
   it('keeps containers off the streets, out of walls and apart', () => {
+    const inGrid = (c: { x: number; z: number }) =>
+      c.x > town.roadsX[0] && c.x < town.roadsX[town.roadsX.length - 1] && c.z > town.roadsZ[0] && c.z < town.roadsZ[town.roadsZ.length - 1];
     for (const c of town.containers) {
+      if (c.inside !== undefined) {
+        // A shelf: inside its store, clear of the walls.
+        const store = town.buildings[c.inside];
+        const room = storeInterior(store);
+        expect(Math.abs(c.x - room.x) + c.hx).toBeLessThanOrEqual(room.hx + 1e-6);
+        expect(Math.abs(c.z - room.z) + c.hz).toBeLessThanOrEqual(room.hz + 1e-6);
+        for (const w of storeWalls(store)) expect(boxesOverlap(c, w)).toBe(false);
+        continue;
+      }
       for (const b of town.buildings) expect(boxesOverlap(c, b)).toBe(false);
+      for (const s of town.solids) expect(boxesOverlap(c, s)).toBe(false);
+      if (!inGrid(c)) continue;
       for (const rx of town.roadsX) expect(Math.abs(c.x - rx) - c.hx).toBeGreaterThan(ROAD / 2 - 0.01);
       for (const rz of town.roadsZ) expect(Math.abs(c.z - rz) - c.hz).toBeGreaterThan(ROAD / 2 - 0.01);
     }
@@ -154,16 +169,93 @@ describe('town', () => {
     }
   });
 
-  it('parks the truck on a street, clear of buildings, with the player a short walk away', () => {
-    const { carSpawn, playerSpawn } = town;
-    expect(Math.abs(carSpawn.z - town.roadsZ[0])).toBeLessThan(1);
-    for (const b of town.buildings) {
-      expect(boxesOverlap({ x: carSpawn.x, z: carSpawn.z, hx: 2.4, hz: 2.4 }, b)).toBe(false);
+  it('keeps the El Cajon in the junkyard, clear of everything, with a straight way out through the gate', () => {
+    const { carSpawn, junkyard: yard } = town;
+    expect(Math.abs(carSpawn.x - yard.x)).toBeLessThan(yard.hx - 3);
+    expect(Math.abs(carSpawn.z - yard.z)).toBeLessThan(yard.hz - 3);
+    expect(carSpawn.yaw).toBe(0); // facing +Z, the gate
+    // Sweep the truck's footprint, with some room to spare, from where it sits out to the street.
+    for (let z = carSpawn.z; z <= town.roadsZ[0]; z += 0.25) {
+      const truck = { x: carSpawn.x, z, hx: 1.3, hz: 2.8 };
+      for (const s of town.solids) expect(boxesOverlap(truck, s), `at z ${z.toFixed(1)}`).toBe(false);
+      for (const c of town.containers) expect(boxesOverlap(truck, c)).toBe(false);
     }
-    const walk = Math.hypot(playerSpawn.x - carSpawn.x, playerSpawn.z - carSpawn.z);
-    expect(walk).toBeGreaterThan(5);
-    expect(walk).toBeLessThan(40);
+    // The junkyard is off the streets and does not touch the town's lots.
+    expect(yard.z + yard.hz).toBeLessThan(town.roadsZ[0] - ROAD / 2);
+    expect(YARD.gateHalf * 2).toBeGreaterThan(5);
     expect(LOT).toBe(28);
+  });
+
+  it('stacks the four wheels in one pile, and leaves a big rig tyre clear of the walls and wrecks', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const t = generateTown(seed);
+      const wheels = t.junkyard.parts.filter((p) => p.kind === 'wheel');
+      expect(wheels.map((w) => w.level).sort()).toEqual([0, 1, 2, 3]);
+      for (const w of wheels) expect([w.x, w.z]).toEqual([wheels[0].x, wheels[0].z]);
+      const rig = t.junkyard.rigTire;
+      expect(Math.abs(rig.x - t.junkyard.x)).toBeLessThan(t.junkyard.hx - 1);
+      expect(Math.abs(rig.z - t.junkyard.z)).toBeLessThan(t.junkyard.hz - 1);
+      for (const s of t.solids) expect(boxesOverlap({ x: rig.x, z: rig.z, hx: 0.55, hz: 0.55 }, s)).toBe(false);
+    }
+  });
+
+  it('stands one shipping container in the yard, clear of everything else, and it is solid', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const t = generateTown(seed);
+      const y = t.junkyard;
+      const box = pieceBox(y.cargo);
+      expect(y.cargo.kind).toBe('ft20');
+      expect(y.cargo.level).toBe(0);
+      expect(Math.abs(box.x - y.x) + box.hx).toBeLessThan(y.hx - 0.2);
+      expect(Math.abs(box.z - y.z) + box.hz).toBeLessThan(y.hz - 0.2);
+      for (const other of [...y.fence, ...y.wrecks, y.shed, ...y.tires, ...t.containers.filter((c) => c.fixedLoot)]) {
+        expect(boxesOverlap(box, other), `seed ${seed}`).toBe(false);
+      }
+      // The truck, its way out to the gate, the loose parts and the rig tyre are all clear of it.
+      expect(boxesOverlap(box, { x: t.carSpawn.x, z: t.carSpawn.z, hx: 1.2, hz: 2.8 })).toBe(false);
+      expect(boxesOverlap(box, { x: y.gateX, z: y.z + y.hz - 3, hx: 2.2, hz: 4 })).toBe(false);
+      for (const p of y.parts) expect(boxesOverlap(box, { x: p.x, z: p.z, hx: 0.3, hz: 0.3 })).toBe(false);
+      expect(boxesOverlap(box, { x: y.rigTire.x, z: y.rigTire.z, hx: 0.55, hz: 0.55 })).toBe(false);
+      expect(t.solids.some((s) => s.x === box.x && s.z === box.z && s.height > 2)).toBe(true);
+    }
+  });
+
+  it('lays every part of the El Cajon out in the yard, apart, and a wrench in the toolbox', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const t = generateTown(seed);
+      const yard = t.junkyard;
+      const want = PART_KINDS.reduce((n, k) => n + PARTS[k].count, 0);
+      expect(yard.parts.length).toBe(want);
+      for (const k of PART_KINDS) expect(yard.parts.filter((p) => p.kind === k).length).toBe(PARTS[k].count);
+      for (const p of yard.parts) {
+        expect(Math.abs(p.x - yard.x)).toBeLessThan(yard.hx - 1);
+        expect(Math.abs(p.z - yard.z)).toBeLessThan(yard.hz - 1);
+        for (const s of t.solids) expect(boxesOverlap({ x: p.x, z: p.z, hx: 0.3, hz: 0.3 }, s)).toBe(false);
+      }
+      const toolbox = t.containers.find((c) => c.fixedLoot?.some((s) => s.id === 'wrench'));
+      expect(toolbox).toBeDefined();
+      expect(Math.abs(toolbox!.x - yard.x)).toBeLessThan(yard.hx);
+      expect(Math.abs(toolbox!.z - yard.z)).toBeLessThan(yard.hz);
+    }
+  });
+
+  it('has a market with shelves in every town, and you reach shelves only from inside', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const t = generateTown(seed);
+      const markets = t.buildings.filter((b) => b.store === 'market');
+      expect(markets.length).toBeGreaterThan(0);
+      for (const b of t.buildings.filter((b) => b.store)) {
+        const shelves = t.containers.filter((c) => c.inside === b.id);
+        expect(shelves.length).toBeGreaterThanOrEqual(4);
+        expect(storeAt(t, b.x, b.z)).toBe(b.id);
+        expect(reachableContainers(t, b.x, b.z)).toEqual(shelves);
+        // Just outside the back wall, the shelves cannot be reached through it.
+        const depth = Math.abs(Math.sin(b.front!)) > 0.5 ? b.hx : b.hz;
+        const out = { x: b.x - Math.sin(b.front!) * (depth + 0.6), z: b.z - Math.cos(b.front!) * (depth + 0.6) };
+        expect(storeAt(t, out.x, out.z)).toBeNull();
+        for (const c of reachableContainers(t, out.x, out.z)) expect(c.inside).toBeUndefined();
+      }
+    }
   });
 });
 
@@ -265,13 +357,13 @@ describe('interaction', () => {
 
 describe('the town can be walked', () => {
   for (const seed of [1, 2, 3, 4, 5]) {
-    it(`seed ${seed}: every container can be reached on foot from where the player starts`, () => {
+    it(`seed ${seed}: every container and every part can be reached on foot from the street`, () => {
       const town = generateTown(seed);
-      const solids = [...town.buildings, ...town.containers];
+      const solids = [...town.solids, ...town.containers];
       const step = 0.5;
-      const x0 = town.center.x - 70;
-      const z0 = town.center.z - 80; // starts south of the town so the player spawn is inside
-      const n = Math.round(140 / step);
+      const x0 = town.center.x - 90;
+      const z0 = town.center.z - 100; // reaches south of the town to take in the junkyard
+      const n = Math.round(180 / step);
       const blocked = (x: number, z: number) =>
         solids.some((s) => Math.abs(x - s.x) < s.hx + WALKER.radius && Math.abs(z - s.z) < s.hz + WALKER.radius);
       const seen = new Set<number>();
@@ -301,13 +393,19 @@ describe('the town can be walked', () => {
             const pz = c.z + b * step;
             if (!reachable(px, pz)) continue;
             const w: Walker = { x: px, z: pz, yaw: Math.atan2(c.x - px, c.z - pz), pitch: 0 };
+            if (!reachableContainers(town, px, pz).includes(c)) continue; // not through a store wall
             if (findTarget(w, { containers: [c], truck: null })) ok = true;
           }
         }
         expect(ok, `container ${c.id} (${c.kind}) at ${c.x.toFixed(1)}, ${c.z.toFixed(1)}`).toBe(true);
       }
-      // And the truck's parking spot is reachable too.
-      expect(reachable(town.carSpawn.x, town.carSpawn.z - 4)).toBe(true);
+      // And the truck, and every part lying in the junkyard.
+      expect(reachable(town.carSpawn.x + 2, town.carSpawn.z)).toBe(true);
+      for (const p of town.junkyard.parts) {
+        let ok = false;
+        for (let a = -3; a <= 3 && !ok; a++) for (let b = -3; b <= 3 && !ok; b++) ok = reachable(p.x + a * step, p.z + b * step);
+        expect(ok, `part ${p.kind} at ${p.x.toFixed(1)}, ${p.z.toFixed(1)}`).toBe(true);
+      }
     });
   }
 });

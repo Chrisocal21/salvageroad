@@ -6,11 +6,15 @@ import type { Walker } from './walker';
 export const REACH = 2.2; // m from the surface of the thing
 export const LOOK_CONE = 1.0; // radians either side of straight ahead
 
-export type Target = { kind: 'container'; id: number } | { kind: 'truck' };
+export type Target = { kind: 'container'; id: number } | { kind: 'part'; id: number } | { kind: 'pickup'; id: number } | { kind: 'truck' };
 
 export interface Candidates {
   containers: (Box2 & { id: number })[];
   truck: Obb2 | null;
+  /** Loose truck parts lying about, as small boxes. */
+  parts?: (Box2 & { id: number })[];
+  /** Things lying about that go straight into the pack, such as the big rig tyre. */
+  pickups?: (Box2 & { id: number })[];
 }
 
 function angleTo(w: Walker, x: number, z: number): number {
@@ -34,13 +38,15 @@ export function findTarget(w: Walker, c: Candidates): Target | null {
     }
   };
   for (const box of c.containers) consider({ kind: 'container', id: box.id }, distanceToBox(w.x, w.z, box), box.x, box.z);
+  for (const box of c.parts ?? []) consider({ kind: 'part', id: box.id }, distanceToBox(w.x, w.z, box), box.x, box.z);
+  for (const box of c.pickups ?? []) consider({ kind: 'pickup', id: box.id }, distanceToBox(w.x, w.z, box), box.x, box.z);
   if (c.truck) consider({ kind: 'truck' }, distanceToObb(w.x, w.z, c.truck), c.truck.x, c.truck.z);
   return best;
 }
 
-/** Where to stand when stepping out of the truck: beside the driver's door, on the left. */
-export function exitPosition(truck: Obb2): { x: number; z: number; yaw: number } {
-  const side = truck.hx + 0.9;
+/** Where to stand when stepping out of the truck: beside the driver's door on the left, or the passenger's door on the right (side -1). */
+export function exitPosition(truck: Obb2, leftOrRight: 1 | -1 = 1): { x: number; z: number; yaw: number } {
+  const side = (truck.hx + 0.9) * leftOrRight;
   // Left of a vehicle facing +Z is +X. Its local X axis is (cos yaw, -sin yaw).
   return {
     x: truck.x + Math.cos(truck.yaw) * side,

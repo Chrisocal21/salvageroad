@@ -1,6 +1,6 @@
 // Seeded placement of placeholder props (trees, crates, rocks). Plain numbers, no rendering.
 
-export type PropKind = 'tree' | 'crate' | 'rock';
+export type PropKind = 'tree' | 'crate' | 'rock' | 'shrub' | 'cactus';
 
 export interface Prop {
   kind: PropKind;
@@ -55,4 +55,6 @@ export const PROP_COLLIDER: Record<PropKind, { hx: number; hy: number; hz: numbe
   tree: { hx: 0.25, hy: 2, hz: 0.25 },
   crate: { hx: 0.6, hy: 0.6, hz: 0.6 },
   rock: { hx: 0.9, hy: 0.6, hz: 0.9 },
+  shrub: { hx: 0.4, hy: 0.3, hz: 0.4 },
+  cactus: { hx: 0.3, hy: 1.3, hz: 0.3 },
 };

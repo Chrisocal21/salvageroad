@@ -30,7 +30,7 @@ function smooth(t: number): number {
 }
 
 /** Smooth value noise in the range -1 to 1. */
-function noise(seed: number, x: number, z: number): number {
+export function noise(seed: number, x: number, z: number): number {
   const ix = Math.floor(x);
   const iz = Math.floor(z);
   const fx = smooth(x - ix);
@@ -45,7 +45,7 @@ function noise(seed: number, x: number, z: number): number {
 }
 
 /** Four layers of noise: big hills with smaller bumps on top. Range about -1 to 1. */
-function fbm(seed: number, x: number, z: number): number {
+export function fbm(seed: number, x: number, z: number): number {
   let sum = 0;
   let amp = 1;
   let freq = 1;

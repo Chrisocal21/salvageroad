@@ -1,3 +1,5 @@
+import type { BuildBox } from '../rules/baseWorld';
+
 // Shared by both physics engines so the same scene and the same driving script can run on each.
 export interface DriveInput {
   throttle: number; // -1 (reverse) to 1 (forward)
@@ -17,6 +19,10 @@ export interface CarSim {
   wheels(): Pose[];
   /** Forward speed in m/s (positive means moving along +Z of the chassis). */
   speed(): number;
+  /** Replaces the solid blocks of the player's base. Optional: only the Rapier world supports it. */
+  setBuildBoxes?(boxes: BuildBox[]): void;
+  /** Tells a world with rolling ground where to keep ground under the car. Optional: only the Rapier world supports it. */
+  setFocus?(x: number, z: number): void;
 }
 
 // The longer cargo bed adds rear overhang. Recenter the chassis and axle positions together.

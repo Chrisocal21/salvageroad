@@ -1,4 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
+import type { BuildBox } from '../rules/baseWorld';
 import { resistanceForce, resolvePedals, updateSteer } from '../rules/driving';
 import { PROP_COLLIDER, type Prop } from '../rules/scatter';
 import { columnMajor, terrainHeight, type TerrainGrid } from '../rules/terrain';
@@ -9,9 +10,16 @@ type Quat = [number, number, number, number]; // x, y, z, w
 /** What the world is made of. With nothing given it is the flat lab ground. */
 export interface WorldSpec {
   terrain?: TerrainGrid;
+  /**
+   * Ground height anywhere, for a big world. The ground is then built as small collider tiles that follow the car
+   * (see setFocus), instead of one heightfield for the whole map. Replaces terrain, and the lab's ramp is left out.
+   */
+  ground?: (x: number, z: number) => number;
   props?: Prop[];
   /** Solid boxes standing on the ground, such as buildings and containers. height is full height. */
   boxes?: { x: number; z: number; hx: number; hz: number; height: number }[];
+  /** Solid blocks of the player's base (containers and pillars), standing on level ground. */
+  buildBoxes?: BuildBox[];
   /** Where the truck starts. Defaults to the lab spawn point. */
   carSpawn?: { x: number; z: number; yaw: number };
 }
@@ -32,7 +40,56 @@ export async function createRapierSim(spec: WorldSpec = {}): Promise<CarSim> {
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.timestep = 1 / 60;
 
-  if (spec.terrain) {
+  // Rolling ground: 64 m square heightfield tiles, 2 m between points, kept in a ring round the car. The 2 m lattice
+  // is the same one the finest drawn terrain tiles use, so what you see is what you drive on.
+  const TILE = 64;
+  const TILE_CELLS = 32;
+  const REACH = 224; // metres of ground kept built round the car
+  const groundTiles = new Map<string, RAPIER.Collider>();
+  function groundTile(ix: number, iz: number): RAPIER.Collider {
+    const cell = TILE / TILE_CELLS;
+    const n = TILE_CELLS + 1;
+    const heights = new Float32Array(n * n);
+    for (let col = 0; col < n; col++) {
+      for (let row = 0; row < n; row++) heights[col * n + row] = spec.ground!(ix * TILE + col * cell, iz * TILE + row * cell);
+    }
+    return world.createCollider(
+      RAPIER.ColliderDesc.heightfield(TILE_CELLS, TILE_CELLS, heights, { x: TILE, y: 1, z: TILE }).setTranslation(
+        ix * TILE + TILE / 2,
+        0,
+        iz * TILE + TILE / 2,
+      ),
+    );
+  }
+  /** Builds missing ground tiles near (x, z), at most maxNew of them, and drops the ones far away. */
+  function setFocus(x: number, z: number, maxNew = 6) {
+    if (!spec.ground) return;
+    const r = Math.ceil(REACH / TILE);
+    const cx = Math.floor(x / TILE);
+    const cz = Math.floor(z / TILE);
+    const need = new Set<string>();
+    let made = 0;
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const key = `${cx + dx}:${cz + dz}`;
+        need.add(key);
+        if (!groundTiles.has(key) && made < maxNew) {
+          groundTiles.set(key, groundTile(cx + dx, cz + dz));
+          made++;
+        }
+      }
+    }
+    for (const [key, collider] of groundTiles) {
+      if (!need.has(key)) {
+        world.removeCollider(collider, true);
+        groundTiles.delete(key);
+      }
+    }
+  }
+
+  if (spec.ground) {
+    // tiles are built below, once we know where the car starts
+  } else if (spec.terrain) {
     world.createCollider(heightfieldDesc(spec.terrain));
   } else {
     world.createCollider(RAPIER.ColliderDesc.cuboid(500, 0.5, 500).setTranslation(0, -0.5, 0));
@@ -40,6 +97,7 @@ export async function createRapierSim(spec: WorldSpec = {}): Promise<CarSim> {
 
   // Static boxes for the props. Trees collide as their trunk only.
   const seed = spec.terrain?.spec.seed ?? 0;
+  const groundAt = spec.ground ?? ((x: number, z: number) => terrainHeight(seed, x, z));
   for (const prop of spec.props ?? []) {
     const c = PROP_COLLIDER[prop.kind];
     const hx = c.hx * prop.scale;
@@ -48,31 +106,44 @@ export async function createRapierSim(spec: WorldSpec = {}): Promise<CarSim> {
     const half = prop.yaw / 2;
     world.createCollider(
       RAPIER.ColliderDesc.cuboid(hx, hy, hz)
-        .setTranslation(prop.x, terrainHeight(seed, prop.x, prop.z) + hy, prop.z)
+        .setTranslation(prop.x, groundAt(prop.x, prop.z) + hy, prop.z)
         .setRotation({ x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }),
     );
   }
 
-  const half = RAMP.pitch / 2;
-  world.createCollider(
-    RAPIER.ColliderDesc.cuboid(...RAMP.halfExtents)
-      .setTranslation(...RAMP.center)
-      .setRotation({ x: Math.sin(half), y: 0, z: 0, w: Math.cos(half) }),
-  );
+  if (!spec.ground) {
+    const half = RAMP.pitch / 2;
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(...RAMP.halfExtents)
+        .setTranslation(...RAMP.center)
+        .setRotation({ x: Math.sin(half), y: 0, z: 0, w: Math.cos(half) }),
+    );
+  }
 
   for (const b of spec.boxes ?? []) {
     world.createCollider(
       RAPIER.ColliderDesc.cuboid(b.hx, b.height / 2, b.hz).setTranslation(
         b.x,
-        terrainHeight(seed, b.x, b.z) + b.height / 2,
+        groundAt(b.x, b.z) + b.height / 2,
         b.z,
       ),
     );
   }
 
+  // The player's base. Can be replaced while the world runs, so building does not reset the truck.
+  let buildColliders: RAPIER.Collider[] = [];
+  function setBuildBoxes(boxes: BuildBox[]) {
+    for (const c of buildColliders) world.removeCollider(c, true);
+    buildColliders = boxes.map((b) =>
+      world.createCollider(RAPIER.ColliderDesc.cuboid(b.hx, b.height / 2, b.hz).setTranslation(b.x, b.y0 + b.height / 2, b.z)),
+    );
+  }
+  setBuildBoxes(spec.buildBoxes ?? []);
+
   const spawn = spec.carSpawn
-    ? { x: spec.carSpawn.x, y: terrainHeight(seed, spec.carSpawn.x, spec.carSpawn.z) + 1, z: spec.carSpawn.z, yaw: spec.carSpawn.yaw }
+    ? { x: spec.carSpawn.x, y: groundAt(spec.carSpawn.x, spec.carSpawn.z) + 1, z: spec.carSpawn.z, yaw: spec.carSpawn.yaw }
     : { x: CAR.spawn[0], y: CAR.spawn[1], z: CAR.spawn[2], yaw: 0 };
+  setFocus(spawn.x, spawn.z, Infinity); // ground under the car before the first step
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(spawn.x, spawn.y, spawn.z)
@@ -192,6 +263,8 @@ export async function createRapierSim(spec: WorldSpec = {}): Promise<CarSim> {
       });
     },
     speed: () => vehicle.currentVehicleSpeed(),
+    setBuildBoxes,
+    setFocus: (x: number, z: number) => setFocus(x, z),
   };
 }
 

@@ -16,10 +16,29 @@ export interface Hud {
   setSpeed(kmh: number): void;
   /** Hunger and thirst, each 0 (empty) to 100 (full). */
   setNeeds(needs: { hunger: number; thirst: number }): void;
+  /** The build bar at the bottom of the screen. null leaves build mode. */
+  setBuild(build: BuildHud | null): void;
+  /** Opens the vehicle storage panel: the vehicle's slots beside yours. Clicking a slot sends that stack to the other side. */
+  openStorage(title: string, store: Inventory, pack: Inventory, onMove: (from: 'store' | 'pack', index: number) => void): void;
+  /** Redraws the storage panel after something moved. */
+  refreshStorage(): void;
+  closeStorage(): void;
+  isStorageOpen(): boolean;
   /** Small controls reminder in the corner. */
   setHint(text: string): void;
   /** Developer readout: frame rate and so on. Empty text hides it. */
   setDebug(text: string): void;
+}
+
+/** What the build bar shows while the player is in build mode. */
+export interface BuildHud {
+  /** A heading above the items, such as 'On the truck: 3'. */
+  title?: string;
+  items: { name: string; selected: boolean }[];
+  level: number;
+  /** What the aimed spot would do, such as 'Level 1  +4 pillars', or why it cannot be built. */
+  status: string;
+  ok: boolean;
 }
 
 const TOAST_MS = 4000;
@@ -77,6 +96,30 @@ export function createHud(parent: HTMLElement): Hud {
   panel.hidden = true;
   let lastInventory: Inventory | null = null;
 
+  // Vehicle storage: two grids side by side. Clicking a slot moves that stack across.
+  const storageEl = el('div', 'hud-storage', root);
+  const storageSides = [el('div', 'hud-storage-side', storageEl), el('div', 'hud-storage-side', storageEl)];
+  const storageHeads = storageSides.map((side) => {
+    const head = el('div', 'hud-inventory-title', side);
+    return { name: el('span', '', head), count: el('span', 'hud-inventory-count', head) };
+  });
+  const storageGrids = storageSides.map((side) => el('div', 'hud-slots', side));
+  el('div', 'hud-inventory-hint', storageEl, 'Click a stack to move it across   Tab, E or Esc to close');
+  storageEl.hidden = true;
+  let storageState: {
+    store: Inventory;
+    pack: Inventory;
+    onMove: (from: 'store' | 'pack', index: number) => void;
+  } | null = null;
+
+  const buildEl = el('div', 'hud-build', root);
+  const buildStatus = el('div', 'hud-build-status', buildEl);
+  const buildTitle = el('div', 'hud-build-title', buildEl);
+  const buildRow = el('div', 'hud-build-row', buildEl);
+  const buildLevel = el('div', 'hud-build-level', buildEl);
+  buildEl.hidden = true;
+  let lastBuild = '';
+
   const hint = el('div', 'hud-hint', root);
   const debug = el('div', 'hud-debug', root);
   debug.hidden = true;
@@ -99,7 +142,48 @@ export function createHud(parent: HTMLElement): Hud {
     );
   }
 
+  function renderStorage(titleText: string) {
+    const st = storageState;
+    if (!st) return;
+    const sides: { name: string; inv: Inventory; from: 'store' | 'pack' }[] = [
+      { name: titleText, inv: st.store, from: 'store' },
+      { name: 'Carrying', inv: st.pack, from: 'pack' },
+    ];
+    sides.forEach((side, i) => {
+      storageHeads[i].name.textContent = side.name;
+      storageHeads[i].count.textContent = `${side.inv.slots.filter((s) => s !== null).length} of ${side.inv.slots.length}`;
+      storageGrids[i].replaceChildren(
+        ...side.inv.slots.map((s, index) => {
+          const slot = el('div', s ? 'hud-slot full' : 'hud-slot empty');
+          if (s) {
+            slot.textContent = ITEMS[s.id].name;
+            if (s.count > 1) el('span', 'hud-slot-count', slot, String(s.count));
+            slot.addEventListener('click', () => st.onMove(side.from, index));
+          }
+          return slot;
+        }),
+      );
+    });
+  }
+  let storageTitle = '';
+
   return {
+    openStorage(titleText, store, pack, onMove) {
+      storageState = { store, pack, onMove };
+      storageTitle = titleText;
+      storageEl.hidden = false;
+      renderStorage(titleText);
+    },
+    refreshStorage() {
+      if (!storageEl.hidden) renderStorage(storageTitle);
+    },
+    closeStorage() {
+      storageState = null;
+      storageEl.hidden = true;
+    },
+    isStorageOpen() {
+      return !storageEl.hidden;
+    },
     setPrompt(p) {
       const key = p ? `${p.key}|${p.text}` : '';
       if (key === lastPrompt) return; // only touch the page when something changed
@@ -135,6 +219,30 @@ export function createHud(parent: HTMLElement): Hud {
     setNeeds(n) {
       showNeed(hungerBar, n.hunger);
       showNeed(thirstBar, n.thirst);
+    },
+    setBuild(build) {
+      buildEl.hidden = build === null;
+      if (!build) {
+        lastBuild = '';
+        return;
+      }
+      const key = JSON.stringify(build);
+      if (key === lastBuild) return; // only touch the page when something changed
+      lastBuild = key;
+      buildStatus.textContent = build.status;
+      buildStatus.classList.toggle('bad', !build.ok);
+      buildStatus.hidden = build.status === '';
+      buildTitle.textContent = build.title ?? '';
+      buildTitle.hidden = !build.title;
+      buildRow.replaceChildren(
+        ...build.items.map((item, i) => {
+          const slot = el('div', item.selected ? 'hud-build-item on' : 'hud-build-item');
+          el('span', 'hud-build-key', slot, String(i + 1));
+          el('span', '', slot, item.name);
+          return slot;
+        }),
+      );
+      buildLevel.textContent = `Build level ${build.level}   (mouse wheel)`;
     },
     setHint(text) {
       if (hint.textContent !== text) hint.textContent = text;

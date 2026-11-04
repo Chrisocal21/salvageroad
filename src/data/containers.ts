@@ -1,6 +1,9 @@
 // Content as data: the kinds of lootable container, their size, and what they can hold.
 
-export type ContainerKind = 'crate' | 'locker' | 'dumpster' | 'toolbox';
+export type ContainerKind = 'crate' | 'locker' | 'dumpster' | 'toolbox' | 'market_shelf' | 'hardware_shelf';
+
+/** The kinds found outside, against the walls of buildings. Shelves are only found inside stores. */
+export const OUTSIDE_KINDS: ContainerKind[] = ['crate', 'locker', 'dumpster', 'toolbox'];
 
 export interface LootEntry {
   item: string;
@@ -33,11 +36,46 @@ export const CONTAINERS: Record<ContainerKind, ContainerDef> = {
     color: 0x9a7b4f,
     rolls: [1, 3],
     loot: [
+      // Boxes are where food and water turn up most outside: you wake up hungry and thirsty.
       { item: 'canned_beans', weight: 4, min: 1, max: 3 },
       { item: 'crackers', weight: 3, min: 1, max: 2 },
-      { item: 'water_bottle', weight: 3, min: 1, max: 2 },
-      { item: 'rope', weight: 2, min: 1, max: 1 },
-      { item: 'scrap_metal', weight: 2, min: 1, max: 4 },
+      { item: 'water_bottle', weight: 5, min: 1, max: 2 },
+      { item: 'jerky', weight: 2, min: 1, max: 2 },
+      { item: 'rope', weight: 1, min: 1, max: 1 },
+      { item: 'scrap_metal', weight: 1, min: 1, max: 4 },
+    ],
+  },
+  market_shelf: {
+    kind: 'market_shelf',
+    name: 'shelf',
+    hx: 1.1,
+    hz: 0.3,
+    height: 1.8,
+    color: 0x8a8f94,
+    rolls: [2, 4],
+    loot: [
+      { item: 'water_bottle', weight: 5, min: 1, max: 3 },
+      { item: 'canned_beans', weight: 4, min: 1, max: 3 },
+      { item: 'soda', weight: 3, min: 1, max: 3 },
+      { item: 'crackers', weight: 3, min: 1, max: 2 },
+      { item: 'jerky', weight: 3, min: 1, max: 3 },
+      { item: 'batteries', weight: 1, min: 1, max: 2 },
+    ],
+  },
+  hardware_shelf: {
+    kind: 'hardware_shelf',
+    name: 'shelf',
+    hx: 1.1,
+    hz: 0.3,
+    height: 1.8,
+    color: 0x7a6a52,
+    rolls: [1, 3],
+    loot: [
+      { item: 'duct_tape', weight: 4, min: 1, max: 2 },
+      { item: 'rope', weight: 3, min: 1, max: 2 },
+      { item: 'batteries', weight: 3, min: 1, max: 3 },
+      { item: 'wrench', weight: 2, min: 1, max: 1 },
+      { item: 'water_bottle', weight: 1, min: 1, max: 1 },
     ],
   },
   locker: {
@@ -65,6 +103,8 @@ export const CONTAINERS: Record<ContainerKind, ContainerDef> = {
     rolls: [1, 3],
     loot: [
       { item: 'scrap_metal', weight: 6, min: 1, max: 5 },
+      { item: 'tire', weight: 2, min: 1, max: 2 },
+      { item: 'motor', weight: 1, min: 1, max: 1 },
       { item: 'duct_tape', weight: 2, min: 1, max: 1 },
       { item: 'crackers', weight: 1, min: 1, max: 1 },
       { item: 'rope', weight: 1, min: 1, max: 1 },
