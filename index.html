@@ -7,6 +7,27 @@
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #111; }
       canvas { display: block; }
+      .loading-screen { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; padding: clamp(24px, 7vw, 110px); box-sizing: border-box; overflow: hidden; background: linear-gradient(90deg, #090e10f5, #090e10bc 60%, #090e1080); color: #f0ede3; font: 14px/1.6 'Segoe UI', system-ui, sans-serif; transition: opacity .5s ease, visibility 0s .5s; }
+      .loading-screen.is-ready { opacity: 0; visibility: hidden; pointer-events: none; }
+      .loading-content { position: relative; z-index: 1; width: min(540px, 100%); }
+      .loading-eyebrow { display: flex; align-items: center; gap: 12px; color: #edac65; font-size: 10px; letter-spacing: .24em; text-transform: uppercase; }
+      .loading-eyebrow::before { content: ''; width: 36px; height: 2px; background: #edac65; }
+      .loading-content h1 { max-width: 600px; margin: 28px 0 22px; font: 400 clamp(70px, 10vw, 150px)/.84 Impact, 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .015em; }
+      .loading-content h1 span { display: block; color: #edac65; }
+      .loading-tagline { color: #c9cabb; font: 11px/1.8 monospace; letter-spacing: .22em; text-transform: uppercase; margin-bottom: clamp(24px, 6vh, 60px); }
+      .loading-track { height: 3px; overflow: hidden; background: #ffffff19; width: min(340px, 100%); }
+      .loading-track::after { content: ''; display: block; width: 35%; height: 100%; background: #edac65; animation: loading-scan 1.6s ease-in-out infinite alternate; }
+      .loading-content p { margin: 14px 0 0; color: #b7beaf; font: 11px/1.6 monospace; text-transform: uppercase; letter-spacing: .08em; }
+      .loading-survey { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .5; pointer-events: none; }
+      .loading-footer { position: absolute; bottom: clamp(20px, 5vh, 50px); left: clamp(24px, 7vw, 110px); right: clamp(24px, 7vw, 110px); display: flex; justify-content: space-between; gap: 24px; padding-top: 16px; border-top: 1px solid #d6d4bd40; color: #b7beaf; font: 10px/1.7 monospace; letter-spacing: .08em; }
+      .loading-footer strong { color: #edac65; font-weight: 400; }
+      @media (max-height: 600px) { .loading-content h1 { font-size: 70px; margin: 18px 0; } .loading-tagline { margin-bottom: 24px; } .loading-footer { bottom: 18px; font-size: 9px; } }
+      @media (max-width: 600px) { .loading-footer { flex-direction: column; gap: 5px; font-size: 9px; } .loading-survey { opacity: .25; } }
+      .loading-content button { margin-top: 20px; padding: 9px 18px; border: 1px solid #d3b075; border-radius: 3px; background: #d3b075; color: #17201b; font: inherit; cursor: pointer; }
+      .loading-screen.failed .loading-track::after { animation: none; width: 100%; background: #eca58b; }
+      body.is-loading > :not(.loading-screen):not(canvas):not(script) { visibility: hidden; }
+      @keyframes loading-scan { from { transform: translateX(-100%); } to { transform: translateX(285%); } }
+      @media (prefers-reduced-motion: reduce) { .loading-screen { transition: none; } .loading-track::after { animation: none; width: 100%; } }
       #bench {
         display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
         color: #fff; font: 14px/1.5 monospace; background: rgba(0,0,0,0.85); padding: 16px 22px;
@@ -14,8 +35,30 @@
       }
     </style>
   </head>
-  <body>
+  <body class="is-loading">
+    <div id="loading-screen" class="loading-screen" role="status" aria-live="polite" aria-busy="true">
+      <svg class="loading-survey" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs><pattern id="survey-grid" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M80 0H0V80" fill="none" stroke="#bec6a6" stroke-opacity=".12"/></pattern></defs>
+        <rect width="1600" height="900" fill="url(#survey-grid)"/>
+        <g fill="none" stroke="#aab99a" stroke-width="1" opacity=".35">
+          <path d="M800-80C600 140 1200 190 940 460S1000 760 760 980M900-80C700 140 1300 190 1040 460S1100 760 860 980M1000-80C800 140 1400 190 1140 460S1200 760 960 980M1100-80C900 140 1500 190 1240 460S1300 760 1060 980M1200-80C1000 140 1600 190 1340 460S1400 760 1160 980"/>
+        </g>
+        <path d="M1390 960 1110 660 1190 460 1020 230 1140-80" stroke="#edac65" stroke-width="38" stroke-opacity=".07" fill="none"/>
+        <path d="M1390 960 1110 660 1190 460 1020 230 1140-80" stroke="#edac65" stroke-width="2" fill="none"/>
+        <g fill="#101819" stroke="#edac65" stroke-width="2"><circle cx="1110" cy="660" r="9"/><circle cx="1020" cy="230" r="9"/></g>
+        <g fill="#c7ccba" font-family="monospace" font-size="12" letter-spacing="3"><text x="1140" y="700">SALVAGE / RECOVERY</text><text x="1050" y="215">THE ROAD AHEAD</text></g>
+      </svg>
+      <div class="loading-content">
+        <div class="loading-eyebrow">An open road. A second chance.</div>
+        <h1>Salvage <span>Road</span></h1>
+        <div class="loading-tagline">Nothing new. Nothing wasted.</div>
+        <div class="loading-track" aria-hidden="true"></div>
+        <p id="loading-message">Loading the region...</p>
+        <button id="loading-retry" type="button" hidden>Reload game</button>
+      </div>
+      <div class="loading-footer"><span><strong>FIELD NOTE /</strong> Restore the El Cajon. The bigger hauls come later.</span><span>SCAVENGE &nbsp; / &nbsp; RESTORE &nbsp; / &nbsp; SURVIVE</span></div>
+    </div>
     <div id="bench"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/bootstrap.ts"></script>
   </body>
 </html>

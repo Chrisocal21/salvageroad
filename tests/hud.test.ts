@@ -12,6 +12,47 @@ function setup() {
 }
 
 describe('hud', () => {
+  it('offers explicit item use without consuming when assigning, and traps pack focus', () => {
+    const { hud, q } = setup(), inv = createInventory(), consume = vi.fn();
+    addItem(inv, 'water_bottle', 2);
+    hud.setInventory(inv);
+    hud.setConsumeHandler(consume);
+    hud.toggleInventory();
+    q('[aria-label="Use water bottle"]').click();
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0);
+    q('[aria-label="Assign water bottle to hotbar"]').click();
+    expect(consume).toHaveBeenCalledTimes(1);
+    const close = q('.hud-inventory .ui-close');
+    close.focus();
+    close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+    expect(document.activeElement).toBe(q('[aria-label="Assign water bottle to hotbar"]'));
+  });
+
+  it('switches the pause field manual without presenting every control at once', () => {
+    const { hud } = setup();
+    hud.setPaused(true);
+    const categories = [...document.querySelectorAll<HTMLButtonElement>('.hud-control-category')];
+    expect(document.querySelectorAll('.hud-control-group:not([hidden])')).toHaveLength(1);
+    categories[1].click();
+    expect(document.querySelector('.hud-control-group:not([hidden])')?.textContent).toContain('Handbrake');
+    expect(categories[1].getAttribute('aria-pressed')).toBe('true');
+    expect(categories[0].getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('labels empty pack positions and inspects equipment with keyboard focus', () => {
+    const { hud, q } = setup(), inv = createInventory();
+    addItem(inv, 'build_hammer', 1);
+    hud.setInventory(inv);
+    hud.toggleInventory();
+    expect(document.querySelectorAll('.hud-inventory .hud-slot-index')).toHaveLength(12);
+    expect(q('.hud-slot.empty').textContent).toContain('Quick access');
+    q('[aria-label="Assign build hammer to hotbar"]').focus();
+    expect(q('.hud-inspector h2').textContent).toBe('build hammer');
+    expect(q('.hud-inspector').textContent).toContain('right-click confirmation');
+    expect(q('.hud-inspector-stat').textContent).toContain('1 / 1');
+    expect(q('.hud-slot').classList.contains('inspected')).toBe(true);
+  });
+
   it('opens pause controls, focuses resume and keeps keyboard focus inside', () => {
     const { hud, q } = setup();
     const resume = vi.fn(() => hud.setPaused(false));

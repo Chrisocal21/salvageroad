@@ -1,56 +1,65 @@
 .wood-build-menu[hidden] { display: none; }
-.wood-build-menu { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 28px; background: #080e10b8; backdrop-filter: blur(7px); color: var(--ui-text); font: 13px/1.5 var(--ui-font); }
-.wood-build-menu *, .wood-build-menu *::before { box-sizing: border-box; }
-.wood-workspace { width: min(940px, 100%); max-height: min(720px, calc(100dvh - 56px)); display: flex; flex-direction: column; padding: 26px; background: linear-gradient(140deg, #1d2925, var(--ui-bg) 65%); border: 1px solid var(--ui-edge); border-top: 2px solid #d3b07599; border-radius: 5px; box-shadow: var(--ui-shadow); }
-.wood-supplies { margin: 18px 0 0; padding: 10px 0; border-top: 1px solid var(--ui-edge); border-bottom: 1px solid var(--ui-edge); color: var(--ui-muted); font-size: 11px; }
-.wood-workspace-body { display: grid; grid-template-columns: 152px minmax(0, 1fr); min-height: 300px; overflow: hidden; }
-.wood-categories { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 22px 18px 22px 0; border-right: 1px solid var(--ui-edge); }
-.wood-categories .ui-button { padding: 10px 12px; text-align: left; border: 1px solid transparent; background: none; color: var(--ui-muted); font-weight: 400; }
-.wood-categories [aria-selected=true] { border-color: #d3b07530; background: #d3b0750e; color: var(--ui-accent); box-shadow: inset 2px 0 var(--ui-accent); }
-.wood-content { min-width: 0; overflow: auto; scrollbar-color: #647064 transparent; padding: 22px 0 22px 22px; }
+.wood-build-menu { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: clamp(18px, 4vw, 64px); background: linear-gradient(110deg, #080c0df5, #101719e6 55%, #101719bb); backdrop-filter: blur(12px); color: var(--ui-text); font: 13px/1.5 var(--ui-font); }
+.wood-build-menu *, .wood-build-menu *::before, .wood-build-menu *::after { box-sizing: border-box; }
+.wood-workspace { width: min(1200px, 100%); min-width: 0; max-height: calc(100dvh - 72px); display: flex; flex-direction: column; padding: 28px 32px; background: linear-gradient(125deg, #32393088, #141a19e8 60%); border-top: 1px solid #e8dec76b; border-bottom: 1px solid #e8dec736; }
+.wood-supplies { margin: 18px 0 0; padding: 12px 0; border-top: 1px solid var(--ui-edge); border-bottom: 1px solid var(--ui-edge); color: var(--ui-muted); font: 11px/1.6 monospace; }
+.wood-workspace-body { display: grid; grid-template-columns: 180px minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.wood-categories { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 24px 24px 24px 0; border-right: 1px solid var(--ui-edge); counter-reset: category; }
+.wood-categories .ui-button { padding: 18px 10px; text-align: left; border: 0; border-bottom: 1px solid var(--ui-edge); background: none; color: var(--ui-muted); font-size: 12px; font-weight: 400; letter-spacing: 0; }
+.wood-categories .ui-button::before { counter-increment: category; content: '0' counter(category); display: block; margin-bottom: 5px; font: 9px monospace; color: #b6b99b80; }
+.wood-categories [aria-selected=true] { background: linear-gradient(90deg, #edac651c, transparent); color: var(--ui-accent); box-shadow: inset 3px 0 var(--ui-accent); }
+.wood-content { min-width: 0; min-height: 0; overflow: auto; scrollbar-color: #697468 #161c1b; scrollbar-width: thin; padding: 24px 0 24px 28px; }
 .wood-content [hidden] { display: none; }
-.wood-content h2 { margin: 0 0 5px; font-size: 18px; font-weight: 500; letter-spacing: -.02em; }
-.wood-section-description { margin: 0 0 18px; max-width: 460px; color: var(--ui-muted); font-size: 11px; line-height: 1.6; }
-.wood-build-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.wood-recipe { display: flex; align-items: center; gap: 13px; min-height: 76px; min-width: 0; padding: 14px; text-align: left; background: #ffffff04; border: 1px solid var(--ui-edge); border-radius: 3px; color: var(--ui-text); cursor: pointer; transition: background .15s, border-color .15s; }
-.wood-recipe .ui-icon { width: 28px; height: 28px; color: var(--ui-accent); }
-.wood-recipe-label { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.wood-recipe-name { font: 500 12px/1.4 var(--ui-font); }
-.wood-recipe-cost { font: 10px/1.4 var(--ui-font); color: var(--ui-muted); }
-.wood-recipe:hover:not(:disabled) { background: #d3b0750f; border-color: #d3b07590; }
-.wood-recipe:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
-.wood-recipe:disabled { cursor: not-allowed; color: #929e95; background: #ffffff01; }
-.wood-recipe:disabled .ui-icon { color: #8c978d; opacity: .7; }
-.wood-recipe:disabled .wood-recipe-cost { color: #919c93; }
-.wood-pack-bench { margin-top: 14px; }
+.wood-content h2 { margin: 0 0 8px; font: 400 30px/1 var(--ui-display); text-transform: uppercase; letter-spacing: .025em; }
+.wood-section-description { margin: 0 0 22px; max-width: 550px; color: var(--ui-muted); font-size: 12px; line-height: 1.7; }
+.wood-build-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.wood-recipe { position: relative; display: grid; grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: 1fr auto; align-items: center; gap: 14px; min-height: 158px; min-width: 0; padding: 20px; text-align: left; background: linear-gradient(135deg, #d6d4bd0c, transparent), repeating-linear-gradient(0deg, transparent 0 19px, #d6d4bd04 19px 20px), repeating-linear-gradient(90deg, transparent 0 19px, #d6d4bd04 19px 20px); border: 1px solid #c6c7ad33; border-radius: 0; color: var(--ui-text); cursor: pointer; transition: background-color .15s, border-color .15s; }
+.wood-recipe::after { content: '+'; position: absolute; top: 5px; right: 9px; color: #d6d4bd55; font: 12px monospace; }
+.wood-recipe .ui-icon { width: 62px; height: 62px; color: var(--ui-accent); stroke-width: 1; }
+.wood-recipe-label { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wood-recipe-name { font: 600 14px/1.4 var(--ui-font); }
+.wood-recipe-cost { font: 11px/1.6 var(--ui-font); color: var(--ui-muted); }
+.wood-recipe-state { grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--ui-edge); color: var(--ui-accent); font: 9px/1.4 monospace; text-transform: uppercase; letter-spacing: .08em; }
+.wood-recipe:hover:not(:disabled) { background-color: #edac6512; border-color: var(--ui-accent); }
+.wood-recipe:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: -3px; }
+.wood-recipe:disabled { cursor: not-allowed; color: #b7bcaf; }
+.wood-recipe:disabled .ui-icon { color: #a4ac99; }
+.wood-recipe:disabled .wood-recipe-state { color: #b7bcaf; }
+.wood-pack-bench { margin-top: 16px; }
 .wood-cargo-status { font-size: 12px; color: var(--ui-muted); }
-.wood-footer { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; padding-top: 16px; border-top: 1px solid var(--ui-edge); }
+.wood-cargo-status.ui-empty { border: 1px dashed var(--ui-edge); padding: 32px; line-height: 1.8; }
+.wood-footer { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; padding-top: 16px; border-top: 1px solid var(--ui-edge); flex-shrink: 0; }
 .wood-footer details { min-width: 0; font-size: 11px; color: var(--ui-muted); }
-.wood-footer summary { padding: 8px 0; cursor: pointer; }
-.wood-footer details p { margin: 7px 0 0; max-width: 530px; line-height: 1.8; }
-.wood-footer > button { flex-shrink: 0; font-size: 11px; }
+.wood-footer summary { padding: 10px 0; cursor: pointer; }
+.wood-footer details p { margin: 7px 0 0; max-width: 530px; max-height: 17dvh; overflow: auto; line-height: 1.8; }
+.wood-footer > button { flex-shrink: 0; font-size: 10px; }
 .wood-footer summary:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
-@media (max-width: 700px) {
+@media (max-width: 850px) {
+  .wood-workspace { padding: 22px; }
+  .wood-workspace-body { grid-template-columns: 135px minmax(0, 1fr); }
+  .wood-categories { padding-right: 14px; }
+  .wood-content { padding-left: 18px; }
+  .wood-recipe { grid-template-columns: 45px minmax(0, 1fr); padding: 14px; gap: 10px; }
+  .wood-recipe .ui-icon { width: 40px; height: 40px; }
+}
+@media (max-width: 650px) {
   .wood-build-menu { padding: 12px; }
   .wood-workspace { padding: 18px; max-height: calc(100dvh - 24px); }
-  .wood-workspace .ui-panel-header h1 { font-size: 23px; }
-  .wood-workspace-body { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
-  .wood-categories { flex-direction: row; gap: 0; padding: 10px 0; border-right: 0; border-bottom: 1px solid var(--ui-edge); overflow-x: auto; flex-shrink: 0; }
-  .wood-categories .ui-button { padding: 8px 10px; white-space: nowrap; font-size: 11px; }
+  .wood-workspace .ui-panel-header h1 { font-size: 30px; }
+  .wood-workspace-body { display: flex; flex-direction: column; overflow: auto; }
+  .wood-categories { flex-direction: row; gap: 0; padding: 8px 0; border-right: 0; border-bottom: 1px solid var(--ui-edge); overflow-x: auto; flex-shrink: 0; }
+  .wood-categories .ui-button { padding: 10px; white-space: nowrap; font-size: 10px; border-bottom: 0; }
+  .wood-categories .ui-button::before { display: none; }
   .wood-categories [aria-selected=true] { box-shadow: inset 0 -2px var(--ui-accent); }
-  .wood-content { overflow: visible; padding: 16px 0; }
-  .wood-footer { flex-wrap: wrap; gap: 10px; }
-  .wood-recipe { padding: 11px; gap: 9px; }
-  .wood-recipe .ui-icon { width: 23px; height: 23px; }
-}
-@media (max-width: 420px) {
+  .wood-content { overflow: visible; padding: 18px 0; }
   .wood-build-parts { grid-template-columns: 1fr; }
-  .wood-recipe { min-height: 62px; }
-  .wood-workspace .ui-panel-header h1 { font-size: 20px; }
+  .wood-recipe { min-height: 125px; }
+  .wood-footer { flex-wrap: wrap; gap: 8px; }
+  .wood-footer > button { font-size: 9px; max-width: 100%; }
 }
 @media (max-height: 600px) {
   .wood-build-menu { padding: 12px; }
   .wood-workspace { max-height: calc(100dvh - 24px); padding: 18px; }
-  .wood-workspace-body { min-height: 0; }
+  .wood-workspace .ui-panel-header h1 { font-size: 34px; }
 }
 @media (prefers-reduced-motion: reduce) { .wood-recipe { transition: none; } }

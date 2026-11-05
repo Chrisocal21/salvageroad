@@ -138,20 +138,38 @@ export function createHud(parent: HTMLElement): Hud {
     bar.row.classList.toggle('low', pct < 25);
   }
 
+  function containFocus(panel: HTMLElement) {
+    panel.addEventListener('keydown', event => {
+      if (event.key !== 'Tab') return;
+      const controls = [...panel.querySelectorAll<HTMLElement>('button, [tabindex="0"]')]
+        .filter(control => !control.matches(':disabled') && !control.closest('[hidden]'));
+      const index = controls.indexOf(document.activeElement as HTMLElement);
+      event.preventDefault();
+      controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length]?.focus();
+    });
+  }
+
   const inventoryOverlay = el('div', 'hud-menu-overlay', root);
   inventoryOverlay.hidden = true;
   const panel = el('section', 'hud-inventory', inventoryOverlay);
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
   panel.setAttribute('aria-label', 'Inventory');
+  containFocus(panel);
   el('div', 'ui-eyebrow', panel, 'Salvage Road / Field equipment');
   const title = el('div', 'hud-inventory-title', panel);
-  el('span', '', title, 'Carrying');
+  el('span', '', title, 'Field pack');
   const count = el('span', 'hud-inventory-count', title);
   const closeInventoryButton = el('button', 'ui-button ui-close', title, 'Close · Esc');
   closeInventoryButton.type = 'button';
   closeInventoryButton.addEventListener('click', () => showInventory(false));
-  const slotsEl = el('div', 'hud-slots', panel);
+  const inventoryBody = el('div', 'hud-equipment-layout', panel);
+  const manifest = el('div', 'hud-manifest', inventoryBody);
+  el('div', 'ui-section-label', manifest, 'Quick access  /  1 - 0     +     Pack reserve');
+  const slotsEl = el('div', 'hud-slots', manifest);
+  const inspector = el('aside', 'hud-inspector', inventoryBody);
+  inspector.setAttribute('aria-label', 'Equipment details');
+  let inspectedSlot: number | null = null;
   const inventoryHint = el('div', 'hud-inventory-hint', panel, 'Assign an item, then press 1–9 or 0 to swap it onto the hotbar. Click food/drink to use. Tab, I or Esc closes.');
   panel.hidden = true;
   let lastInventory: Inventory | null = null;
@@ -170,6 +188,7 @@ export function createHud(parent: HTMLElement): Hud {
   storageEl.setAttribute('role', 'dialog');
   storageEl.setAttribute('aria-modal', 'true');
   storageEl.setAttribute('aria-label', 'Vehicle storage');
+  containFocus(storageEl);
   const storageHeader = el('div', 'hud-storage-header', storageEl);
   el('div', 'ui-eyebrow', storageHeader, 'Cargo / Inventory transfer');
   const closeStorageButton = el('button', 'ui-button', storageHeader, 'Close · Esc');
@@ -332,22 +351,39 @@ export function createHud(parent: HTMLElement): Hud {
   pausePanel.setAttribute('role', 'dialog');
   pausePanel.setAttribute('aria-modal', 'true');
   pausePanel.setAttribute('aria-labelledby', 'pause-title');
-  el('div', 'hud-pause-eyebrow', pausePanel, 'SALVAGE ROAD');
-  el('h1', '', pausePanel, 'Paused').id = 'pause-title';
-  el('p', 'hud-pause-description', pausePanel, 'Take your time. The world is paused.');
-  const resume = el('button', 'hud-resume', pausePanel, 'Resume game · Esc');
+  const pauseIdentity = el('div', 'hud-pause-identity', pausePanel);
+  el('div', 'hud-pause-eyebrow', pauseIdentity, 'SALVAGE ROAD / OFF THE CLOCK');
+  el('h1', '', pauseIdentity, 'Paused').id = 'pause-title';
+  el('p', 'hud-pause-description', pauseIdentity, 'The road can wait.');
+  const resume = el('button', 'hud-resume', pauseIdentity, 'Resume game · Esc');
   resume.type = 'button';
   let resumeHandler = () => {};
   resume.addEventListener('click', () => resumeHandler());
-  const controls = el('div', 'hud-controls', pausePanel);
+  const pauseGuide = el('div', 'hud-pause-guide', pausePanel);
+  el('div', 'ui-eyebrow', pauseGuide, 'FIELD MANUAL / CONTROLS');
+  const controlNav = el('div', 'hud-control-nav', pauseGuide);
+  controlNav.setAttribute('aria-label', 'Control categories');
+  const controls = el('div', 'hud-controls', pauseGuide);
   const groups: [string, [string, string][]][] = [
     ['On foot & essentials', [['W A S D / Arrows', 'Move'], ['Mouse', 'Look around (click game to capture)'], ['Shift', 'Run'], ['E', 'Interact / enter or leave vehicle / built doors'], ['K', 'Wood build menu / craft build hammer'], ['Tab / I', 'Inventory / vehicle storage'], ['F / Q', 'Eat / drink'], ['M', 'Map'], ['Esc', 'Close a panel / pause or resume']]],
     ['Driving', [['W / S', 'Accelerate / brake & reverse'], ['A / D', 'Steer'], ['Arrows', 'Alternative driving controls'], ['Space', 'Handbrake'], ['C', 'Switch seats'], ['H', 'Hook / unhook flatbed (big rig, stopped)'], ['V', 'Flip truck upright']]],
-    ['Building & unloading', [['1–0', 'Equip hotbar item / start bench placement'], ['K', 'Build menu / choose hauled container'], ['U', 'Start / finish unloading'], ['Left click', 'Place equipped piece'], ['Right click', 'Dismantle / pick up'], ['R', 'Rotate equipped piece'], ['Wheel / PgUp / PgDn', 'Change build level']]],
+    ['Building & unloading', [['1–0', 'Equip hotbar item / start bench placement'], ['K', 'Build menu / choose hauled container'], ['U', 'Start / finish unloading'], ['Left click', 'Place equipped piece'], ['Right click', 'Confirm removal / pick up'], ['R', 'Rotate equipped piece'], ['Wheel / PgUp / PgDn', 'Change build level']]],
     ['Testing & world tools', [['R', 'Reset to town (outside build mode)'], ['J', 'Cycle through salvage yards'], ['G', 'Toggle fly mode'], ['W A S D · Q / E', 'Fly · descend / ascend (Space also ascends)'], ['Shift / Wheel', 'Fly faster / adjust flight speed'], ['T', 'Land on foot from fly mode'], ['N / [ / ]', 'New / previous / next world seed'], ['B / X', 'Toggle performance run / hide results']]],
   ];
-  for (const [heading, bindings] of groups) {
+  const controlSections: HTMLElement[] = [];
+  const controlButtons: HTMLButtonElement[] = [];
+  for (const [index, [heading, bindings]] of groups.entries()) {
+    const category = el('button', 'hud-control-category', controlNav, ['On foot', 'Driving', 'Building', 'World tools'][index]);
+    category.type = 'button';
+    category.setAttribute('aria-pressed', String(index === 0));
+    controlButtons.push(category);
     const section = el('section', 'hud-control-group', controls);
+    section.hidden = index !== 0;
+    controlSections.push(section);
+    category.addEventListener('click', () => {
+      controlSections.forEach((pane, i) => { pane.hidden = i !== index; });
+      controlButtons.forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
+    });
     el('h2', '', section, heading);
     const list = el('dl', '', section);
     for (const [key, action] of bindings) {
@@ -357,8 +393,33 @@ export function createHud(parent: HTMLElement): Hud {
     }
   }
   pausePanel.addEventListener('keydown', event => {
-    if (event.key === 'Tab') { event.preventDefault(); resume.focus(); }
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      const buttons = [resume, ...controlButtons], index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
+    }
   });
+
+  function inspectInventory(index: number | null) {
+    inspectedSlot = index;
+    const stack = index === null ? null : lastInventory?.slots[index];
+    inspector.replaceChildren();
+    el('div', 'ui-section-label', inspector, stack ? `Equipment / ${ITEMS[stack.id].kind}` : 'Equipment / Overview');
+    const visual = el('div', 'hud-inspector-visual', inspector);
+    visual.append(itemIcon(stack?.id ?? 'basic_bench'));
+    el('h2', '', inspector, stack ? ITEMS[stack.id].name : 'Travel light.\nBuild something.');
+    const item = stack ? ITEMS[stack.id] : null;
+    const description = !item ? 'Scavenge supplies from towns and salvage yards. Hover or focus an item to inspect it. Your first ten slots are always within reach.' :
+      item.restores ? `Restores ${item.restores}% ${item.kind === 'food' ? 'hunger' : 'thirst'}. Click the item in your pack to use it.` :
+      item.placeable ? 'Assign to a numbered slot, close your pack and press that number to begin placement.' :
+      item.id === 'build_hammer' ? 'Equip to remove placed wood pieces with right-click confirmation. Open K to build.' :
+      item.kind === 'part' ? 'A salvaged vehicle component. Carry it to a restoration project to fit it.' :
+      item.kind === 'material' ? 'Recovered building and crafting stock. Check the workshop for recipes.' :
+      'Carried field equipment. Assign it to quick access for use on the road.';
+    el('p', '', inspector, description);
+    if (stack && item) el('div', 'hud-inspector-stat', inspector, `STACK  ${stack.count} / ${item.stack}`);
+    for (const [i, slot] of [...slotsEl.children].entries()) slot.classList.toggle('inspected', i === index);
+  }
 
   function renderInventory() {
     if (!lastInventory) return;
@@ -368,16 +429,31 @@ export function createHud(parent: HTMLElement): Hud {
       ...slots.map((s, index) => {
         const usable = s !== null && (ITEMS[s.id].kind === 'food' || ITEMS[s.id].kind === 'drink');
         const slot = el('div', s ? (usable ? 'hud-slot usable' : 'hud-slot') : 'hud-slot empty');
+        el('span', 'hud-slot-index', slot, index < HOTBAR_SIZE ? hotbarLabel(index) : `R${index - HOTBAR_SIZE + 1}`);
+        slot.addEventListener('pointerenter', () => inspectInventory(index));
+        slot.addEventListener('focusin', () => inspectInventory(index));
+        if (!s) {
+          el('span', 'hud-slot-empty-mark', slot, '+');
+          el('span', 'hud-slot-empty-label', slot, index < HOTBAR_SIZE ? 'Quick access' : 'Reserve');
+        }
         if (s) {
           slot.style.borderLeftColor = KIND_COLOUR[ITEMS[s.id].kind] ?? 'transparent';
           slot.append(itemIcon(s.id));
           el('span', 'hud-slot-name', slot, ITEMS[s.id].name);
           if (s.count > 1) el('span', 'hud-slot-count', slot, String(s.count));
+          const actions = el('div', 'hud-slot-actions', slot);
           if (usable) {
             slot.title = `Click to ${ITEMS[s.id].kind === 'food' ? 'eat' : 'drink'}`;
             slot.addEventListener('click', () => consumeHandler?.(index));
+            const use = el('button', 'hud-assign', actions, 'Use');
+            use.type = 'button';
+            use.setAttribute('aria-label', `Use ${ITEMS[s.id].name}`);
+            use.addEventListener('click', event => {
+              event.stopPropagation();
+              consumeHandler?.(index);
+            });
           }
-          const assign = el('button', 'hud-assign', slot, 'Assign');
+          const assign = el('button', 'hud-assign', actions, 'Assign');
           assign.type = 'button';
           assign.setAttribute('aria-label', `Assign ${ITEMS[s.id].name} to hotbar`);
           assign.addEventListener('click', event => {
@@ -390,6 +466,7 @@ export function createHud(parent: HTMLElement): Hud {
         return slot;
       }),
     );
+    inspectInventory(inspectedSlot);
   }
 
   function renderHotbar() {
@@ -442,11 +519,24 @@ export function createHud(parent: HTMLElement): Hud {
       storageGrids[i].replaceChildren(
         ...side.inv.slots.map((s, index) => {
           const slot = el('div', s ? 'hud-slot full' : 'hud-slot empty');
+          el('span', 'hud-slot-index', slot, String(index + 1).padStart(2, '0'));
           if (s) {
             slot.append(itemIcon(s.id));
             el('span', 'hud-slot-name', slot, ITEMS[s.id].name);
             if (s.count > 1) el('span', 'hud-slot-count', slot, String(s.count));
             slot.addEventListener('click', () => st.onMove(side.from, index));
+            slot.tabIndex = 0;
+            slot.setAttribute('role', 'button');
+            slot.setAttribute('aria-label', `Transfer ${ITEMS[s.id].name}, ${s.count}`);
+            slot.addEventListener('keydown', event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                st.onMove(side.from, index);
+              }
+            });
+          } else {
+            el('span', 'hud-slot-empty-mark', slot, '+');
           }
           return slot;
         }),

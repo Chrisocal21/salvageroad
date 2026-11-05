@@ -60,6 +60,11 @@ export function createWoodBuildMenu(options: {
       label.append(recipe);
     }
     element.append(label);
+    if (glyph) {
+      const state = document.createElement('span');
+      state.className = 'wood-recipe-state';
+      element.append(state);
+    }
     element.addEventListener('click', action);
     parent.append(element);
     return element;
@@ -90,6 +95,7 @@ export function createWoodBuildMenu(options: {
     const tab = button(name, () => selectSection(id), nav);
     tab.id = `${pane.id}-tab`;
     tab.setAttribute('role', 'tab');
+    tab.dataset.category = id;
     tab.setAttribute('aria-controls', pane.id);
     pane.setAttribute('aria-labelledby', tab.id);
     const title = document.createElement('h2');
@@ -205,6 +211,17 @@ export function createWoodBuildMenu(options: {
       selection.button.title = needsHammer && !hasHammer ? 'Requires a build hammer' :
         `Requires ${materialsLabel(materials)} from your pack or nearby vehicle`;
     }
+    for (const recipe of panel.querySelectorAll<HTMLButtonElement>('.wood-recipe')) {
+      const state = recipe.querySelector<HTMLElement>('.wood-recipe-state');
+      if (state) state.textContent = recipe.disabled ? 'Unavailable / check requirements' : 'Ready / select';
+    }
+    craft.querySelector<HTMLElement>('.wood-recipe-state')!.textContent =
+      hasHammer ? 'Already in your pack' : craft.disabled ? 'Requires a log' : 'Ready / craft';
+    for (const tool of tools) tool.button.querySelector<HTMLElement>('.wood-recipe-state')!.textContent =
+      !options.canCraftTools() ? 'Deploy a toolbox nearby' : tool.button.disabled ? 'Missing ingredients' : 'Ready / craft';
+    for (const selection of selections) selection.button.querySelector<HTMLElement>('.wood-recipe-state')!.textContent =
+      selection.kind !== 'basicbench' && !hasHammer ? 'Build hammer required' :
+        selection.button.disabled ? 'Missing materials' : 'Ready / place';
     if (!root.hidden && hadFocus && (!focused?.isConnected || (focused as HTMLButtonElement).disabled)) closeButton.focus();
   }
   function close() {

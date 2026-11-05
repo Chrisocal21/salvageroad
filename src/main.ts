@@ -52,6 +52,7 @@ import { aimWood, checkWood, containerShells, createWoodLayout, isBench, isOpeni
 import { createWoodView } from './render/woodView';
 import { createWoodBuildMenu } from './ui/woodBuildMenu';
 import { createRemovalDialog } from './ui/removalDialog';
+import { finishLoading, isLoading, setLoadingMessage } from './ui/loadingScreen';
 import { craftBuildHammer } from './rules/buildHammer';
 import { countItem } from './rules/inventory';
 import { craftWoodTool, planeLog } from './rules/woodCraft';
@@ -140,6 +141,7 @@ const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerH
 // the desert, a walk from it. The places and the road network between them are planned from the same world
 // (src/rules/places.ts, src/rules/roads.ts), and the ground is cut and filled along the roads so they are drivable.
 const SEED = Number(params.get('seed') ?? 1) | 0;
+setLoadingMessage('Building the island and salvage yards...');
 const worldMap = generateWorld({ ...WORLD, seed: SEED });
 const tPlan = performance.now();
 const plan = planPlaces(worldMap);
@@ -366,7 +368,7 @@ function holdPart(kind: PartKind | null) {
 
 const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
-  if (hud.isTradeOpen() || hud.isPaused() || rigWorkshop?.isOpen() || woodMenu?.isOpen() || removalDialog?.isOpen()) return;
+  if (isLoading() || hud.isTradeOpen() || hud.isPaused() || rigWorkshop?.isOpen() || woodMenu?.isOpen() || removalDialog?.isOpen()) return;
   keys.add(e.code);
   if (e.code === 'Space') e.preventDefault();
   if (e.code === 'Equal' && !e.repeat) {
@@ -457,6 +459,7 @@ function say(text: string) {
 const PARKED: DriveInput = { throttle: 0, steer: 0, brake: 1 }; // handbrake on while you are out of the truck
 
 // Build the truck's physics world and the rig's at the same time instead of one after the other.
+setLoadingMessage('Preparing vehicles and world physics...');
 const [simInit, rigs] = await Promise.all([
   createRapierSim(worldSpec),
   Promise.all(remoteRigSpawns.map(spawn => createRigRuntime(worldSpec, spawn))),
@@ -1572,6 +1575,7 @@ function setPaused(paused: boolean) {
 hud.setResumeHandler(() => setPaused(false));
 window.addEventListener('blur', () => setPaused(true));
 window.addEventListener('keydown', (e) => {
+  if (isLoading()) return;
   if (removalDialog?.isOpen()) {
     if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); removalDialog.close(); }
     return;
@@ -1716,11 +1720,11 @@ let fpsClock = last;
 let liveText = '';
 
 renderer.setAnimationLoop((now) => {
-  if (hud.isPaused() || rigWorkshop?.isOpen() || woodMenu?.isOpen() || removalDialog?.isOpen()) { last = now; return; }
+  if (!isLoading() && (hud.isPaused() || rigWorkshop?.isOpen() || woodMenu?.isOpen() || removalDialog?.isOpen())) { last = now; return; }
   const vehicleBody = rigDriving ? rig.model : car.body;
   const frameStart = performance.now();
   const frameMs = now - last;
-  const dt = Math.min(frameMs / 1000, 0.1);
+  const dt = isLoading() ? 0 : Math.min(frameMs / 1000, 0.1);
   accumulator += dt;
   last = now;
 
@@ -1865,6 +1869,7 @@ renderer.setAnimationLoop((now) => {
   updateBuild();
   baseView.update(camera);
   renderer.render(scene, camera);
+  if (isLoading()) finishLoading();
   const cpuMs = performance.now() - frameStart; // JavaScript time this frame; GPU time is not included
 
   if (bench.active) {

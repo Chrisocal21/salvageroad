@@ -1,5 +1,26 @@
 # Decisions Log
 
+## Salvage field-system art direction
+
+Chris rejected the generic utility-panel appearance and supplied screenshots of the loading, pause, inventory and workshop screens.
+
+- Replace the small centered loading badge with an oversized condensed wordmark, original road-survey/contour SVG, warm recovery-orange accents, field-note footer and asymmetric composition. Retain the translucent world cover and actual first-frame readiness.
+- Give pause a distinct left-hand identity/resume composition and a right-hand field manual. Select one control category at a time instead of presenting a scrolling wall of every binding. Do not invent nonfunctional settings or menu actions.
+- Rebuild the field pack around numbered quick-access/reserve positions, clearly visible empty slots and a real item inspector (category, stack size and usage guidance). Pointer hover and keyboard focus inspect equipment. Explicit Use/Assign actions preserve existing food and hotbar behavior.
+- Turn workshop recipes into technical blueprint cards with enlarged line illustrations, drafting grids and visible readiness/missing-tool/material states. Keep costs, bench gates and actual hauled containers unchanged.
+- Share sharp-edged surfaces, condensed editorial headings, restrained rules and warm accents across storage, barter and restoration. Keep the compact world HUD rather than enlarging it.
+
+Validated desktop loading/pause/pack/workshop screenshots and 390 px layouts, including visible control bounds and scrolling. Preview inventories were isolated from the player's inventory and saved world.
+
+## First-frame startup loading cover
+
+Chris requested a loading screen instead of black startup, with the map behind a transparent black cover until it is ready.
+
+- Keep the initial cover and its styles in the HTML so they appear before the game bundle downloads or world generation blocks the main thread. A lightweight bootstrap allows that cover to paint before importing the game.
+- Use a translucent black backdrop, Salvage Road identity, truthful initialization-stage text and an indeterminate activity line rather than a fabricated percentage or timer.
+- Remove the cover after the first rendered world frame, with terrain and physics initialized. Permit that initial render even if the browser has paused the game before startup completes; do not advance simulation during it.
+- Hide background HUD and block keyboard input while loading. Surface startup errors with a reload action instead of silently revealing a broken scene. Respect reduced-motion settings.
+
 ## Equipped-hammer removal confirmation
 
 The hammer hotbar key now equips it without opening the workshop; K remains the build-menu key. On foot, aim within 3 m and right-click a wood piece to open a confirmation, even without an active placement recipe. Cancel/Escape does nothing; only Confirm removal mutates the layout. Toolbox benches return to inventory; ordinary wood pieces explicitly warn that materials are not refunded. Existing support checks and full-pack protection remain authoritative when confirming. World input and movement stop while the confirmation is open.
