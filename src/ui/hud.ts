@@ -6,6 +6,9 @@ import './hud.css';
 // The in-game HUD, drawn as HTML on top of the canvas. The game only talks to this small interface, so
 // swapping to a canvas-drawn HUD later means rewriting this one file and nothing else.
 export interface Hud {
+  setPaused(paused: boolean): void;
+  isPaused(): boolean;
+  setResumeHandler(fn: () => void): void;
   /** The thing you can use right now, such as { key: 'E', text: 'Open the crate' }. null hides it. */
   setPrompt(prompt: { key: string; text: string } | null): void;
   /** A short message that fades out by itself. */
@@ -264,6 +267,40 @@ export function createHud(parent: HTMLElement): Hud {
 
   let lastPrompt = '';
 
+  const pauseOverlay = el('div', 'hud-pause-overlay', root);
+  pauseOverlay.hidden = true;
+  const pausePanel = el('section', 'hud-pause', pauseOverlay);
+  pausePanel.setAttribute('role', 'dialog');
+  pausePanel.setAttribute('aria-modal', 'true');
+  pausePanel.setAttribute('aria-labelledby', 'pause-title');
+  el('div', 'hud-pause-eyebrow', pausePanel, 'SALVAGE ROAD');
+  el('h1', '', pausePanel, 'Paused').id = 'pause-title';
+  el('p', 'hud-pause-description', pausePanel, 'Take your time. The world is paused.');
+  const resume = el('button', 'hud-resume', pausePanel, 'Resume game · Esc');
+  resume.type = 'button';
+  let resumeHandler = () => {};
+  resume.addEventListener('click', () => resumeHandler());
+  const controls = el('div', 'hud-controls', pausePanel);
+  const groups: [string, [string, string][]][] = [
+    ['On foot & essentials', [['W A S D / Arrows', 'Move'], ['Mouse', 'Look around (click game to capture)'], ['Shift', 'Run'], ['E', 'Interact / enter or leave vehicle'], ['Tab / I', 'Inventory / vehicle storage'], ['F / Q', 'Eat / drink'], ['M', 'Map'], ['Esc', 'Close a panel / pause or resume']]],
+    ['Driving', [['W / S', 'Accelerate / brake & reverse'], ['A / D', 'Steer'], ['Arrows', 'Alternative driving controls'], ['Space', 'Handbrake'], ['C', 'Switch seats'], ['V', 'Flip truck upright']]],
+    ['Building & unloading', [['U', 'Start / finish unloading'], ['1–9', 'Choose cargo'], ['Left click', 'Place container'], ['Right click', 'Pick up container'], ['R', 'Rotate while unloading'], ['Wheel / PgUp / PgDn', 'Change build level']]],
+    ['Testing & world tools', [['R', 'Reset to town (outside build mode)'], ['J', 'Jump to town'], ['G', 'Toggle fly mode'], ['W A S D · Q / E', 'Fly · descend / ascend (Space also ascends)'], ['Shift / Wheel', 'Fly faster / adjust flight speed'], ['T', 'Land on foot from fly mode'], ['N / [ / ]', 'New / previous / next world seed'], ['B / X', 'Toggle performance run / hide results']]],
+  ];
+  for (const [heading, bindings] of groups) {
+    const section = el('section', 'hud-control-group', controls);
+    el('h2', '', section, heading);
+    const list = el('dl', '', section);
+    for (const [key, action] of bindings) {
+      const row = el('div', 'hud-control-row', list);
+      el('dt', '', row, key);
+      el('dd', '', row, action);
+    }
+  }
+  pausePanel.addEventListener('keydown', event => {
+    if (event.key === 'Tab') { event.preventDefault(); resume.focus(); }
+  });
+
   function renderInventory() {
     if (!lastInventory) return;
     const slots = lastInventory.slots;
@@ -328,6 +365,14 @@ export function createHud(parent: HTMLElement): Hud {
   let storageTitle = '';
 
   return {
+    setPaused(paused) {
+      pauseOverlay.hidden = !paused;
+      root.classList.toggle('paused', paused);
+      if (paused) resume.focus();
+      else resume.blur();
+    },
+    isPaused: () => !pauseOverlay.hidden,
+    setResumeHandler(fn) { resumeHandler = fn; },
     openTrade(trader, pack) {
       if (!tradeOverlay.hidden) closeTrade();
       tradeFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;

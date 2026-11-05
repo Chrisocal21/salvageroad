@@ -12,6 +12,23 @@ function setup() {
 }
 
 describe('hud', () => {
+  it('opens pause controls, focuses resume and keeps keyboard focus inside', () => {
+    const { hud, q } = setup();
+    const resume = vi.fn(() => hud.setPaused(false));
+    hud.setResumeHandler(resume);
+    expect(hud.isPaused()).toBe(false);
+    hud.setPaused(true);
+    expect(hud.isPaused()).toBe(true);
+    expect(q('.hud-pause').textContent).toContain('Handbrake');
+    expect(q('.hud-pause').textContent).toContain('Change build level');
+    expect(document.activeElement).toBe(q('.hud-resume'));
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    q('.hud-resume').dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(true);
+    q('.hud-resume').click();
+    expect(resume).toHaveBeenCalledOnce();
+    expect(hud.isPaused()).toBe(false);
+  });
   beforeEach(() => vi.useRealTimers());
 
   it('shows the prompt with its key, and hides it again', () => {

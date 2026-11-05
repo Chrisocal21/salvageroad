@@ -291,7 +291,7 @@ function holdPart(kind: PartKind | null) {
 
 const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
-  if (hud.isTradeOpen()) return;
+  if (hud.isTradeOpen() || hud.isPaused()) return;
   keys.add(e.code);
   if (e.code === 'Space') e.preventDefault();
 });
@@ -441,7 +441,7 @@ function stepFly(dt: number) {
 window.addEventListener(
   'wheel',
   (e) => {
-    if (flying) flySpeed = Math.min(2000, Math.max(3, flySpeed * Math.exp(-e.deltaY * 0.0012)));
+    if (flying && !hud.isPaused()) flySpeed = Math.min(2000, Math.max(3, flySpeed * Math.exp(-e.deltaY * 0.0012)));
   },
   { passive: true },
 );
@@ -492,11 +492,11 @@ let lookPitch = DEFAULT_PITCH;
 let lastLook = 0;
 
 renderer.domElement.addEventListener('click', () => {
-  if (hud.isTradeOpen()) return;
+  if (hud.isTradeOpen() || hud.isPaused()) return;
   void renderer.domElement.requestPointerLock();
 });
 window.addEventListener('mousemove', (e) => {
-  if (document.pointerLockElement !== renderer.domElement) return;
+  if (hud.isPaused() || document.pointerLockElement !== renderer.domElement) return;
   if (flying) {
     fly.yaw -= e.movementX * LOOK_SENSITIVITY;
     fly.pitch = Math.min(1.5, Math.max(-1.5, fly.pitch - e.movementY * LOOK_SENSITIVITY));
@@ -933,7 +933,7 @@ function buildRemove() {
 
 renderer.domElement.addEventListener('mousedown', (e) => {
   if (!unloading || mode !== 'walking' || bench.active) return;
-  if (document.pointerLockElement !== renderer.domElement) return; // the first click only captures the mouse
+  if (hud.isPaused() || document.pointerLockElement !== renderer.domElement) return; // the first click only captures the mouse
   if (e.button === 0) buildPlace();
   if (e.button === 2) buildRemove();
 });
@@ -941,7 +941,7 @@ renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 renderer.domElement.addEventListener(
   'wheel',
   (e) => {
-    if (!unloading) return;
+    if (!unloading || hud.isPaused()) return;
     e.preventDefault();
     changeBuildLevel(e.deltaY < 0 ? 1 : -1);
   },
@@ -1021,7 +1021,27 @@ const bench = new Bench(
   },
   () => `${renderer.domElement.width}x${renderer.domElement.height}`,
 );
+function setPaused(paused: boolean) {
+  keys.clear();
+  hud.setPaused(paused);
+  if (paused) document.exitPointerLock();
+}
+hud.setResumeHandler(() => setPaused(false));
+window.addEventListener('blur', () => setPaused(true));
 window.addEventListener('keydown', (e) => {
+  if (hud.isPaused()) {
+    if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); setPaused(false); }
+    return;
+  }
+  if (e.code === 'Escape' && !e.repeat) {
+    e.preventDefault();
+    if (hud.isTradeOpen()) hud.closeTrade();
+    else if (hud.isStorageOpen()) closeBed();
+    else if (hud.isInventoryOpen()) hud.toggleInventory();
+    else if (mapOverlay.isOpen()) mapOverlay.close();
+    else setPaused(true);
+    return;
+  }
   if (hud.isTradeOpen()) {
     if (e.repeat) return;
     if (e.code === 'Escape' || e.code === 'KeyE' || e.code === 'KeyI') hud.closeTrade();
@@ -1098,6 +1118,7 @@ let fpsClock = last;
 let liveText = '';
 
 renderer.setAnimationLoop((now) => {
+  if (hud.isPaused()) { last = now; return; }
   const frameStart = performance.now();
   const frameMs = now - last;
   const dt = Math.min(frameMs / 1000, 0.1);
@@ -1316,17 +1337,7 @@ renderer.setAnimationLoop((now) => {
       prompt = cargo.length > 0 ? { key: 'U', text: 'Unload containers   (E: get out)' } : { key: 'E', text: 'Get out' };
     }
     hud.setPrompt(flying ? null : prompt);
-    hud.setHint(
-      flying
-        ? 'FLY MODE (testing)   W/A/S/D fly   Q/E down and up   Shift faster   Wheel speed   T land here on foot   M map   G back'
-        : unloading
-        ? 'Click put down   Right-click pick up   R rotate   Wheel height   1-9 choose   W/A/S/D walk   U finish'
-        : mode === 'walking'
-        ? 'W/A/S/D walk   Shift run   E use   F eat   Q drink   Tab carrying   M map   U unload   R reset   J jump to town   G fly   B performance run   Click the page to look around, Esc to release'
-        : seat === 'passenger'
-        ? 'Passenger seat   C switch to driver   E get out   Tab storage   F eat   Q drink'
-        : 'W gas   S brake/reverse   A/D steer   Space handbrake   V flip upright   E get out   C passenger seat   U unload   F eat   Q drink   Tab storage   M map   R reset   B performance run',
-    );
+    hud.setHint(`${flying ? 'Fly mode' : unloading ? 'Unloading' : mode === 'walking' ? 'On foot' : seat === 'passenger' ? 'Passenger' : 'Driving'}  |  Esc pause & controls`);
     hud.setDebug(flying ? `${liveText}\nx ${fly.x.toFixed(0)}  z ${fly.z.toFixed(0)}  height ${fly.y.toFixed(0)} m  speed ${flySpeed.toFixed(0)} m/s` : liveText);
   }
 });
