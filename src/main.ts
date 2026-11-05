@@ -1337,8 +1337,8 @@ renderer.setAnimationLoop((now) => {
       prompt = cargo.length > 0 ? { key: 'U', text: 'Unload containers   (E: get out)' } : { key: 'E', text: 'Get out' };
     }
     hud.setPrompt(flying ? null : prompt);
-    hud.setHint(`${flying ? 'Fly mode' : unloading ? 'Unloading' : mode === 'walking' ? 'On foot' : seat === 'passenger' ? 'Passenger' : 'Driving'}  |  Esc pause & controls`);
-    hud.setDebug(flying ? `${liveText}\nx ${fly.x.toFixed(0)}  z ${fly.z.toFixed(0)}  height ${fly.y.toFixed(0)} m  speed ${flySpeed.toFixed(0)} m/s` : liveText);
+    hud.setHint('Esc  Menu & controls');
+    hud.setDebug(flying ? `${liveText}\nx ${fly.x.toFixed(0)}  z ${fly.z.toFixed(0)}  height ${fly.y.toFixed(0)} m  speed ${flySpeed.toFixed(0)} m/s` : '');
   }
 });
 
