@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Salvage Road</title>
+    <link rel="stylesheet" href="/src/ui/titleScreen.css" />
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #111; }
       canvas { display: block; }
@@ -35,8 +36,28 @@
       }
     </style>
   </head>
-  <body class="is-loading">
-    <div id="loading-screen" class="loading-screen" role="status" aria-live="polite" aria-busy="true">
+  <body class="on-title">
+    <main id="title-screen" class="title-screen" aria-label="Salvage Road title screen">
+      <div class="title-content">
+        <div class="title-kicker">An open road. A second chance.</div>
+        <img class="title-logo" src="/branding/logo.png" alt="Salvage Road" fetchpriority="high" />
+        <p class="title-tagline">Nothing new. Nothing wasted.</p>
+        <button id="title-play" class="title-play" type="button">PLAY</button>
+        <details class="title-controls">
+          <summary>Field manual / Controls</summary>
+          <dl>
+            <div><dt>W A S D</dt><dd>Move. Shift to run.</dd></div>
+            <div><dt>Mouse</dt><dd>Click the game to look around.</dd></div>
+            <div><dt>E</dt><dd>Interact, collect or enter a vehicle.</dd></div>
+            <div><dt>Tab / I</dt><dd>Open your field pack.</dd></div>
+            <div><dt>1 - 0 / K</dt><dd>Equip quick-access items / open the workshop.</dd></div>
+            <div><dt>Esc</dt><dd>Pause and view all controls.</dd></div>
+          </dl>
+        </details>
+      </div>
+      <footer class="title-footer"><span>SCAVENGE / RESTORE / SURVIVE</span><span>DEVELOPMENT BUILD &nbsp; / &nbsp; WORLD PROGRESS IS NOT FULLY SAVED</span></footer>
+    </main>
+    <div id="loading-screen" class="loading-screen" role="status" aria-live="polite" aria-busy="false" aria-hidden="true" hidden>
       <svg class="loading-survey" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
         <defs><pattern id="survey-grid" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M80 0H0V80" fill="none" stroke="#bec6a6" stroke-opacity=".12"/></pattern></defs>
         <rect width="1600" height="900" fill="url(#survey-grid)"/>
@@ -50,7 +71,7 @@
       </svg>
       <div class="loading-content">
         <div class="loading-eyebrow">An open road. A second chance.</div>
-        <h1>Salvage <span>Road</span></h1>
+        <h1 class="loading-brand"><img src="/branding/logo.png" alt="Salvage Road" /></h1>
         <div class="loading-tagline">Nothing new. Nothing wasted.</div>
         <div class="loading-track" aria-hidden="true"></div>
         <p id="loading-message">Loading the region...</p>

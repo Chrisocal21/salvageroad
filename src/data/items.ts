@@ -16,6 +16,10 @@ export interface ItemDef {
 }
 
 export const ITEMS: Record<string, ItemDef> = {
+  vehicle_battery: { id: 'vehicle_battery', name: 'vehicle starter battery', kind: 'part', stack: 1 },
+  vehicle_transmission: { id: 'vehicle_transmission', name: 'light vehicle transmission', kind: 'part', stack: 1 },
+  vehicle_steering: { id: 'vehicle_steering', name: 'light vehicle steering assembly', kind: 'part', stack: 1 },
+  pickup_bed: { id: 'pickup_bed', name: 'replacement pickup bed', kind: 'part', stack: 1 },
   canned_beans: { id: 'canned_beans', name: 'canned beans', kind: 'food', stack: 6, restores: 35 },
   crackers: { id: 'crackers', name: 'crackers', kind: 'food', stack: 6, restores: 15 },
   water_bottle: { id: 'water_bottle', name: 'water bottle', kind: 'drink', stack: 4, restores: 40 },

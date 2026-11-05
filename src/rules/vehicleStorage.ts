@@ -6,8 +6,8 @@ import { addItem, createInventory, type Inventory } from './inventory';
 export const BED_SLOTS = 28;
 export const BOX_TRUCK_SLOTS = 96;
 
-export function createBoxStorage(): Inventory {
-  return createInventory(BOX_TRUCK_SLOTS);
+export function createBoxStorage(slots = BOX_TRUCK_SLOTS): Inventory {
+  return createInventory(slots);
 }
 
 export function createStorage(slots = BED_SLOTS): Inventory {

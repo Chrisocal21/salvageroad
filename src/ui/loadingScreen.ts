@@ -1,6 +1,6 @@
 export function isLoading() {
   const screen = document.getElementById('loading-screen');
-  return screen !== null && !screen.classList.contains('is-ready');
+  return screen !== null && !screen.hidden && !screen.classList.contains('is-ready');
 }
 
 export function setLoadingMessage(message: string) {

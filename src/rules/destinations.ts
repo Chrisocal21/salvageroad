@@ -105,7 +105,7 @@ export function generateDestinations(seed: number, plan: Plan, network: RoadNetw
       const yard = generateJunkyard(makeRandom(seed * 31 + p.id * 7919), 0, 0, containers, false);
       const yaw = (turn + 2) * Math.PI / 2;
       site.salvage = { yard, yaw };
-      for (const box of [...yard.fence, ...yard.wrecks.filter(w => w.model !== 'big-rig'), yard.shed, ...yard.tires])
+      for (const box of [...yard.fence, ...yard.wrecks.filter(w => !w.model), yard.shed, ...yard.tires])
         site.solids.push({ ...localBox(cx, cz, yaw, box.x, box.z, box.hx, box.hz), height: box.height });
       for (const c of containers)
         site.containers.push({ ...c, ...localBox(cx, cz, yaw, c.x, c.z, c.hx, c.hz), id: offset++ });
@@ -168,6 +168,12 @@ export function generateDestinations(seed: number, plan: Plan, network: RoadNetw
     const trailerYard = salvageSites.at(-1)!.salvage!.yard;
     trailerYard.wrecks = trailerYard.wrecks.filter(w => w.model !== 'big-rig');
   }
+  salvageSites.slice(0, 2).forEach((site, index) => {
+    site.salvage!.yard.wrecks.push({
+      x: 9, z: -2, hx: index ? 1.5 : 1.3, hz: index ? 3.7 : 3.15, height: index ? 3.3 : 2.9,
+      turned: false, color: 0xb5824a, model: index ? 'step-van' : 'salvage-pickup',
+    });
+  });
   return sites;
 }
 

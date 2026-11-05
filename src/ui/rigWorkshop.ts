@@ -9,7 +9,7 @@ export function createRigWorkshop(options: {
   build: RigBuild; pack: Inventory; cargo: () => Inventory | undefined;
   sources: {item: RigPart; x:number; z:number}[];
   changed: () => void; drive: () => void;
-  kind?: RigKind; storage?: () => void;
+  kind?: RigKind; storage?: () => void; storageSlots?: number;
 }) {
   const kind = options.kind ?? 'tractor', name = rigLabel(kind), requirements = rigRequirements(kind);
   const root = document.createElement('div'); root.className = 'hud hud-workshop'; root.hidden = true;
@@ -46,13 +46,13 @@ export function createRigWorkshop(options: {
       button.addEventListener('click', () => { message = fitRigPart(options.build,id,options.pack,options.cargo(),kind).message; options.changed(); render(); });
       row.append(button);
     }
-    const status = document.createElement('p'); status.className = 'hud-rig-status'; status.setAttribute('role','status'); status.textContent = message || (rigComplete(options.build,kind) ? 'Complete. Ready to drive.' : kind === 'box-truck' ? `${installed} / ${total} parts installed. Cab, mechanical and cargo assemblies required. Dashboard/seats precede doors; walls precede roof.` : `${installed} / ${total} parts installed. Restore the drivetrain and fit all ten tires.`); panel.append(status);
+    const status = document.createElement('p'); status.className = 'hud-rig-status'; status.setAttribute('role','status'); status.textContent = message || (rigComplete(options.build,kind) ? 'Complete. Ready to drive.' : kind === 'box-truck' ? `${installed} / ${total} parts installed. Cab, mechanical and cargo assemblies required. Dashboard/seats precede doors; walls precede roof.` : kind === 'tractor' ? `${installed} / ${total} parts installed. Restore the drivetrain and fit all ten tires.` : `${installed} / ${total} parts installed. Restore the drivetrain, brakes, four tires and body assemblies to unlock driving and storage.`); panel.append(status);
     const actions = document.createElement('div'); actions.className = 'hud-rig-actions'; panel.append(actions);
     const drive = document.createElement('button'); drive.type = 'button'; drive.className = 'hud-resume'; drive.textContent = `Drive ${name}`; drive.disabled = !rigComplete(options.build,kind);
     drive.addEventListener('click', () => { close(); options.drive(); }); actions.append(drive);
     if (options.storage) {
       const storage = document.createElement('button'); storage.type = 'button'; storage.className = 'hud-resume';
-      storage.textContent = 'Open cargo storage (96 slots)'; storage.disabled = !rigComplete(options.build,kind);
+      storage.textContent = `Open cargo storage (${options.storageSlots ?? 96} slots)`; storage.disabled = !rigComplete(options.build,kind);
       storage.addEventListener('click', () => { close(); options.storage!(); }); actions.append(storage);
     }
     const closeButton = document.createElement('button'); closeButton.type = 'button'; closeButton.className = 'hud-resume'; closeButton.textContent = 'Close · Esc'; closeButton.addEventListener('click',close); actions.append(closeButton);

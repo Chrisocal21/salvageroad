@@ -3,11 +3,11 @@ import { generateDestinations, installDestinationGround, segmentHitsBox } from '
 import type { Plan } from '../src/rules/places';
 import type { RoadNetwork } from '../src/rules/roads';
 import type { Ground } from '../src/rules/ground';
-import { reachableContainers, storeAt } from '../src/rules/town';
+import { generateTown, reachableContainers, storeAt } from '../src/rules/town';
 import { generateWorld, isDryFootprint } from '../src/rules/world';
 import { planPlaces } from '../src/rules/places';
 import { planRoads } from '../src/rules/roads';
-import { rigSpawns } from '../src/rules/rigBuild';
+import { distributeRigParts, partsForRig, rigRequirements, rigSpawns } from '../src/rules/rigBuild';
 import { distanceToObb } from '../src/rules/geometry';
 import { trailerSpawn } from '../src/rules/trailer';
 
@@ -31,7 +31,7 @@ it.each([1, 7, 42])('places every real-world destination clear of all formations
   const sites = generateDestinations(seed, places, roads, 100000, world);
   expect(sites.filter(s => s.siteKind === 'salvage')).toHaveLength(3);
   const rigs = rigSpawns(sites);
-  expect(rigs).toHaveLength(2);
+  expect(rigs.map(r => r.kind)).toEqual(['tractor', 'salvage-pickup', 'box-truck', 'step-van']);
   const trailer = trailerSpawn(sites);
   expect(rigs.every(r => Math.hypot(r.x - trailer.x, r.z - trailer.z) > 100)).toBe(true);
   expect(sites.filter(s => s.salvage).at(-1)!.salvage!.yard.wrecks.every(w => w.model !== 'big-rig')).toBe(true);
@@ -50,6 +50,19 @@ it.each([1, 7, 42])('places every real-world destination clear of all formations
   for (const s of sites) for (const box of [...s.buildings, ...s.containers, ...s.fixtures!])
     for (const r of roads.roads) for (let i = 1; i < r.points.length; i++)
       expect(segmentHitsBox(r.points[i - 1], r.points[i], box, 8), `${s.siteKind} ${box.x},${box.z}`).toBe(false);
+  for (const s of sites.filter(s => s.salvage)) for (const rig of rigSpawns([s])) {
+    for (const box of [...s.solids, ...s.containers])
+      expect(Math.abs(rig.x - box.x) < rig.hx + box.hx && Math.abs(rig.z - box.z) < rig.hz + box.hz).toBe(false);
+    const lane = s.accessLanes![0];
+    expect(segmentHitsBox(lane.from, lane.to, rig, lane.width / 2)).toBe(false);
+  }
+  const starter = generateTown(seed);
+  const loot = distributeRigParts([starter, ...sites]);
+  expect(rigSpawns([starter])).toHaveLength(0);
+  const required = new Map<string, number>();
+  for (const rig of rigs) for (const part of partsForRig(rig.kind))
+    required.set(part, (required.get(part) ?? 0) + rigRequirements(rig.kind)[part]!);
+  for (const [part, count] of required) expect(loot.filter(source => source.item === part)).toHaveLength(count);
 }, 120000);
 
 it('makes differentiated road-end facilities with unique loot and unobstructed doors and turning courts', () => {
@@ -73,11 +86,13 @@ it('makes differentiated road-end facilities with unique loot and unobstructed d
     expect(s.solids.some(b => Math.abs(s.center.x - b.x) < b.hx + 5 && Math.abs(s.center.z - b.z) < b.hz + 5)).toBe(false);
   }
   expect(sites[0].fixtures!.length).toBeGreaterThan(8);
-  expect(sites[1].salvage!.yard.wrecks).toHaveLength(6);
+  expect(sites[1].salvage!.yard.wrecks).toHaveLength(7);
   expect(sites[1].salvage!.yard.wrecks.filter(w => w.model === 'big-rig')).toHaveLength(1);
   const [rig] = rigSpawns(sites);
   expect(sites[1].solids.some(box => Math.abs(rig.x - box.x) < rig.hx + box.hx &&
     Math.abs(rig.z - box.z) < rig.hz + box.hz)).toBe(false);
+  for (const vehicle of rigSpawns(sites)) expect(sites[1].solids.some(box =>
+    Math.abs(vehicle.x - box.x) < vehicle.hx + box.hx && Math.abs(vehicle.z - box.z) < vehicle.hz + box.hz)).toBe(false);
   expect(sites[1].salvage!.yard.fence).toHaveLength(5);
   expect(sites[1].salvage!.yard.parts).toEqual([]);
   expect(plan.places[1].name).toMatch(/Salvage Yard$/);

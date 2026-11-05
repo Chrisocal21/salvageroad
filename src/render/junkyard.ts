@@ -69,7 +69,7 @@ export function createJunkyardView(yard: Junkyard): THREE.Group {
 
   // Five reference-inspired, non-drivable salvage vehicles use collision bounds sized to their silhouettes.
   yard.wrecks.forEach((w, index) => {
-    if (w.model === 'big-rig') return; // The restorable rig is owned by the game, not static scenery.
+    if (w.model) return; // Restorable vehicles are owned by the game, not static scenery.
     const car = createYardVehicle(index);
     car.position.set(w.x, 0, w.z);
     if (w.turned) car.rotation.y = Math.PI / 2;

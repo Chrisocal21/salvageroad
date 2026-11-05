@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { VehicleGeometry, type V3 } from './vehicleGeometry';
+import { vehicleFinish } from './vehicleFinish';
 import { createRustedMaterial } from './rust';
 import { createYardTire } from './yardTire';
 import { BOX_TRUCK, type RigPart } from '../rules/rigBuild';
@@ -7,14 +8,13 @@ import { BOX_TRUCK, type RigPart } from '../rules/rigBuild';
 /** Short-hood, two-axle delivery truck. The damaged cargo shell survives until repaired. */
 export function createBoxTruck() {
   const root = new THREE.Group(); root.name = 'Salvaged box truck';
-  const paint = createRustedMaterial('paint', 0xffffff, 0xd4d0c3);
-  const body = new THREE.MeshStandardMaterial({ color: 0xcac8ba, roughness: .8, metalness: .15 });
+  const {paint,glass} = vehicleFinish(0xc5c5b6);
+  const body = createRustedMaterial('paint', 0xffffff, 0xcac8ba);
   const damaged = createRustedMaterial('paint', 0xffffff, 0xa39b88);
   const alloy = new THREE.MeshStandardMaterial({ color: 0x92968f, roughness: .55, metalness: .65 });
   const steel = createRustedMaterial('chrome', 0x8b8b83);
   const dark = new THREE.MeshStandardMaterial({ color: 0x232723, roughness: .9 });
   const wood = new THREE.MeshStandardMaterial({ color: 0x75634b, roughness: .95 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x364b50, roughness: .22, metalness: .2, transparent: true, opacity: .8 });
   const light = new THREE.MeshStandardMaterial({ color: 0xdddcc3, roughness: .3 });
   const amber = new THREE.MeshStandardMaterial({ color: 0xd8902e, roughness: .45 });
   const red = new THREE.MeshStandardMaterial({ color: 0x9e332b, roughness: .45 });

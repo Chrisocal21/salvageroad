@@ -469,7 +469,7 @@ if (!rigs.length) throw new Error('No remote salvage-yard rigs were generated');
 let rig = rigs[0];
 const rigWorkshops = rigs.map(vehicle => {
   scene.add(vehicle.model);
-  return createRigWorkshop({ build: vehicle.build, kind: vehicle.kind, pack: inventory, sources:rigSources,
+  return createRigWorkshop({ build: vehicle.build, kind: vehicle.kind, pack: inventory, sources:rigSources, storageSlots: vehicle.storage?.slots.length,
   cargo: () => Math.hypot(car.body.position.x-vehicle.model.position.x, car.body.position.z-vehicle.model.position.z) <= 8 ? bed : undefined,
   changed: () => { vehicle.sync(); hud.setInventory(inventory); bedView.update(bed); },
   drive: () => { if (!vehicle.complete()) return; rig=vehicle; rigDriving=true; mode='driving'; seat='driver'; keys.clear(); autoRun=false; camReady=false; lookYaw=0; lookPitch=DEFAULT_PITCH; say(`${vehicle.name}: W/S drive, A/D steer, Space brake, E exit${vehicle.storage ? ', Tab cargo storage' : ''}`); },
@@ -664,14 +664,14 @@ let currentTarget: Target | null = null;
 let storageVehicle: typeof rigs[number] | null = null;
 
 function openBoxStorage(vehicle: typeof rigs[number]) {
-  if (!vehicle.storage || !vehicle.complete()) return say('Finish restoring the box truck before using its cargo storage');
+  if (!vehicle.storage || !vehicle.complete()) return say(`Finish restoring the ${vehicle.name} before using its cargo storage`);
   if (Math.abs(vehicle.physics.speed()) >= .7) return say('Stop before opening the cargo box');
   keys.clear(); autoRun = false;
   storageVehicle = vehicle;
   vehicle.setCargoOpen(true);
   document.exitPointerLock();
   const storage = vehicle.storage;
-  hud.openStorage('Box truck cargo - 96 slots', storage, inventory, (from, index) => {
+  hud.openStorage(`${vehicle.name} cargo - ${storage.slots.length} slots`, storage, inventory, (from, index) => {
     const src = from === 'store' ? storage : inventory, dst = from === 'store' ? inventory : storage;
     const what = describeMove(src, index), result = moveStack(src, index, dst);
     if (!result.moved) say(result.reason === 'full' ? (from === 'store' ? 'Your pack is full' : 'The cargo box is full') : 'Nothing there');
@@ -1226,7 +1226,7 @@ function canStartUnload(): boolean {
 
 function hitchTrailer() {
   if (!rigDriving) return say('Drive a restored big rig to hook up the flatbed');
-  if (rig.kind !== 'tractor') return say('The box truck carries item storage; use the tractor to tow the flatbed');
+  if (rig.kind !== 'tractor') return say('Use the tractor to tow the flatbed; this vehicle carries item storage');
   if (Math.abs(rig.physics.speed()) >= .7) return say('Stop before changing the trailer hitch');
   if (towingRig) {
     if (towingRig !== rig) return say('The flatbed is attached to another rig');
@@ -1852,11 +1852,11 @@ renderer.setAnimationLoop((now) => {
     camY += (vehicleBody.position.y - camY) * (1 - Math.exp(-CAM_HEIGHT_RATE * dt));
 
     back.set(-Math.sin(camHeading), 0, -Math.cos(camHeading)).applyAxisAngle(UP, lookYaw);
-    camTarget.set(vehicleBody.position.x, camY + (rigDriving ? 2 : 1), vehicleBody.position.z);
+    camTarget.set(vehicleBody.position.x, camY + (rigDriving ? rig.cameraHeight : 1), vehicleBody.position.z);
     camPos
       .copy(camTarget)
-      .addScaledVector(back, Math.cos(lookPitch) * (rigDriving ? 14 : CAM_DISTANCE))
-      .setY(camTarget.y + Math.sin(lookPitch) * (rigDriving ? 14 : CAM_DISTANCE));
+      .addScaledVector(back, Math.cos(lookPitch) * (rigDriving ? rig.cameraDistance : CAM_DISTANCE))
+      .setY(camTarget.y + Math.sin(lookPitch) * (rigDriving ? rig.cameraDistance : CAM_DISTANCE));
     camera.position.copy(camPos);
     camera.lookAt(camTarget);
   }

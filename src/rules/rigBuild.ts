@@ -2,14 +2,16 @@ import { countItem, removeItem, type Inventory } from './inventory';
 import { localBox, type Town } from './town';
 
 export function rigSpawns(towns: Town[]) {
+  let heavyIndex = 0;
   return towns.flatMap(town => {
     if (!town.salvage) return [];
     const { yard, yaw } = town.salvage;
-    return yard.wrecks.filter(w => w.model === 'big-rig').map(w => ({
+    return yard.wrecks.filter(w => w.model).map(w => ({
       ...localBox(town.center.x, town.center.z, yaw, w.x, w.z, w.hx, w.hz),
       yaw: yaw + (w.turned ? Math.PI / 2 : 0),
+      kind: w.model === 'big-rig' ? (heavyIndex++ === 1 ? 'box-truck' : 'tractor') as RigKind : w.model as RigKind,
     }));
-  }).map((spawn, i) => ({ ...spawn, kind: (i === 1 ? 'box-truck' : 'tractor') as RigKind }));
+  });
 }
 
 export const RIG_PARTS = { rig_engine: 1, rig_transmission: 1, rig_battery: 1, rig_fuel_tank: 1, rig_steering: 1, rig_tire: 10 } as const;
@@ -21,16 +23,23 @@ export const BOX_REPAIR_PARTS = {
   truck_box_floor: 1, truck_box_panel: 4, truck_box_roof: 1, truck_box_door: 2,
 } as const;
 export const BOX_TRUCK = { frontAxle: 3.05, rearAxle: -2, wheelRadius: .49, wheelX: 1.04, offset: 2.1 } as const;
-export type RigKind = 'tractor' | 'box-truck';
-export type RigPart = keyof typeof RIG_PARTS | keyof typeof BOX_REPAIR_PARTS;
+export const LIGHT_VEHICLE_PARTS = {
+  motor: 1, vehicle_battery: 1, vehicle_transmission: 1, vehicle_steering: 1,
+  tire: 4, truck_radiator: 1, truck_brakes: 4, truck_windshield: 1, truck_seat: 2,
+} as const;
+export const PICKUP_REPAIR_PARTS = { ...LIGHT_VEHICLE_PARTS, pickup_bed: 1, truck_hood: 1, truck_grille: 1, truck_headlight: 2, truck_front_bumper: 1 } as const;
+export const VAN_REPAIR_PARTS = { ...LIGHT_VEHICLE_PARTS, truck_box_floor: 1, truck_box_roof: 1, truck_box_door: 2, truck_headlight: 2, truck_front_bumper: 1 } as const;
+export type RigKind = 'tractor' | 'box-truck' | 'salvage-pickup' | 'step-van';
+export type RigPart = keyof typeof RIG_PARTS | keyof typeof BOX_REPAIR_PARTS | keyof typeof PICKUP_REPAIR_PARTS;
 export type RigBuild = Record<RigPart, number>;
 export const rigParts = Object.keys(RIG_PARTS) as (keyof typeof RIG_PARTS)[];
 export const boxRepairParts = Object.keys(BOX_REPAIR_PARTS) as (keyof typeof BOX_REPAIR_PARTS)[];
 export const rigRequirements = (kind: RigKind): Partial<Record<RigPart, number>> =>
-  kind === 'box-truck' ? { ...RIG_PARTS, rig_tire: 6, ...BOX_REPAIR_PARTS } : RIG_PARTS;
-export const partsForRig = (kind: RigKind): RigPart[] => kind === 'box-truck' ? [...rigParts, ...boxRepairParts] : rigParts;
-export const rigLabel = (kind: RigKind) => kind === 'box-truck' ? 'box truck' : 'big rig';
-export const createRigBuild = (): RigBuild => Object.fromEntries([...rigParts, ...boxRepairParts].map(id => [id, 0])) as RigBuild;
+  kind === 'salvage-pickup' ? PICKUP_REPAIR_PARTS : kind === 'step-van' ? VAN_REPAIR_PARTS :
+    kind === 'box-truck' ? { ...RIG_PARTS, rig_tire: 6, ...BOX_REPAIR_PARTS } : RIG_PARTS;
+export const partsForRig = (kind: RigKind): RigPart[] => Object.keys(rigRequirements(kind)) as RigPart[];
+export const rigLabel = (kind: RigKind) => kind === 'salvage-pickup' ? 'salvage pickup' : kind === 'step-van' ? 'delivery step van' : kind === 'box-truck' ? 'box truck' : 'big rig';
+export const createRigBuild = (): RigBuild => Object.fromEntries([...new Set([...rigParts, ...boxRepairParts, ...Object.keys(PICKUP_REPAIR_PARTS)])].map(id => [id, 0])) as RigBuild;
 export const rigComplete = (build: RigBuild, kind: RigKind = 'tractor') =>
   partsForRig(kind).every(id => build[id] >= (rigRequirements(kind)[id] ?? 0));
 const BOX_AFTER: Partial<Record<RigPart, RigPart[]>> = {
@@ -50,6 +59,15 @@ export function fitRigPart(build: RigBuild, id: RigPart, pack: Inventory, cargo?
   if (kind === 'box-truck') {
     const missing = (BOX_AFTER[id] ?? []).filter(part => build[part] < (requirements[part] ?? 0));
     if (missing.length) return { ok: false, message: `Fit these first: ${missing.map(part => part.replace(/^truck_|^rig_/, '').replaceAll('_', ' ')).join(', ')}.` };
+  }
+  if (kind === 'salvage-pickup' || kind === 'step-van') {
+    const after: Partial<Record<RigPart, RigPart[]>> = {
+      vehicle_battery: ['motor'], truck_hood: ['motor', 'truck_radiator'],
+      truck_grille: ['truck_radiator'], truck_headlight: kind === 'salvage-pickup' ? ['truck_grille'] : [],
+      truck_box_door: ['truck_box_floor'], truck_box_roof: ['truck_box_floor'],
+    };
+    const missing = (after[id] ?? []).filter(part => build[part] < (requirements[part] ?? 0));
+    if (missing.length) return { ok: false, message: `Fit these first: ${missing.join(', ')}.` };
   }
   const source = countItem(pack, id) ? pack : cargo && countItem(cargo, id) ? cargo : null;
   if (!source) return { ok: false, message: 'Bring this part in your pack or park the El Cajon within 8 m.' };

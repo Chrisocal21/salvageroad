@@ -27,6 +27,7 @@ export const WORTH: Record<string, number> = {
   wrench: 30,
   tire: 45,
   motor: 220,
+  vehicle_battery: 50, vehicle_transmission: 160, vehicle_steering: 90, pickup_bed: 120,
   rig_tire: 90,
   rig_engine: 450, rig_transmission: 260, rig_battery: 75, rig_fuel_tank: 110, rig_steering: 140,
   truck_radiator: 80, truck_brakes: 45, truck_exhaust: 55, truck_dash: 70, truck_seat: 50,

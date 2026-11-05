@@ -1,5 +1,26 @@
 # Decisions Log
 
+## Additional supplied GLB restoration vehicles
+
+The supplied prototype pack adds vehicles rather than replacing the El Cajon, tractor or existing box truck.
+
+- Add the unfinished pickup to the first remote salvage yard and the delivery step van to the second. Keep the starter yard exclusive to the El Cajon and the separate flatbed in its later yard. J still cycles through the yards.
+- Give each imported vehicle its own wrench-and-parts restoration project, four tires, drivetrain, brakes, seats, glass and body repairs. The pickup needs a replacement bed; the van needs a cargo floor, roof and rear doors. Distribute sufficient actual parts for all four remote projects, with workshop leads and barter values.
+- Unlock driving and independent item storage only after restoration: pickup 28 slots, step van 64 slots. Preserve the existing box truck's 96 slots. Only the tractor can tow the flatbed.
+- Convert the source -X-forward/Z-up geometry to the game's +Z-forward/Y-up convention. Rebuild wheel pivots from the supplied meshes; use separate suspension/steering animation and collision/tuning values. Add simple missing repair assemblies rather than treating an incomplete blockout as a finished vehicle.
+- Keep the pack's original README with the GLBs under public/models/salvage-vehicles. These are original procedural low-poly prototype models, not shipping-quality art. Vehicle repairs and cargo remain session-only, matching the existing vehicle system.
+
+Validated actual GLB geometry, wheel axes/pivots, repaired bounds, driving, service braking, steering, cargo doors, independent state, multi-seed yard/access clearance and guaranteed repair loot.
+
+## Supplied title artwork and Play-gated startup
+
+Chris supplied the Salvage Road logo and two workshop scenes after requesting the title-screen asset brief.
+
+- Use the pickup workshop scene for the landing screen and the box-truck workshop scene for loading. Keep the supplied attachments unchanged; prepare optimized JPEG background copies and a transparently cropped logo under public/branding.
+- Present the logo, tagline, Play, a lightweight expandable controls guide and an honest development/save-status footer. Do not invent Settings, Continue or browser Quit actions that are not implemented.
+- Import the game only after Play. The title screen does not generate terrain, initialize physics or request the main game module. Disable duplicate Play activation and show the loading artwork before starting the expensive import.
+- Preserve the existing first-render loading completion and explicit startup-error/reload behavior. Hidden loading markup must not report itself as actively loading while the title screen is visible.
+
 ## Salvage field-system art direction
 
 Chris rejected the generic utility-panel appearance and supplied screenshots of the loading, pause, inventory and workshop screens.

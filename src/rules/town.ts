@@ -55,7 +55,7 @@ export interface Solid extends Box2 {
 
 /** A dead car in the junkyard. Lies along X when turned is true, otherwise along Z. */
 export interface Wreck extends Solid {
-  model?: 'big-rig';
+  model?: 'big-rig' | 'salvage-pickup' | 'step-van';
   turned: boolean;
   color: number;
 }
