@@ -103,16 +103,43 @@ describe('hud', () => {
     expect(q('.hud-debug').hidden).toBe(true);
   });
 
-  it('mirrors the pack in the always-on hotbar', () => {
+  it('shows exactly ten numbered hotbar slots, leaving the rest in inventory', () => {
     const { hud } = setup();
     const inv = createInventory();
     addItem(inv, 'canned_beans', 3);
     hud.setInventory(inv);
     const slots = document.querySelectorAll('.hud-hotbar-slot');
-    expect(slots).toHaveLength(12);
-    expect(document.querySelectorAll('.hud-hotbar-slot.empty')).toHaveLength(11);
+    inv.slots[11] = { id: 'basic_bench', count: 1 };
+    hud.setInventory(inv);
+    expect(slots).toHaveLength(10);
+    expect(document.querySelectorAll('.hud-hotbar-slot.empty')).toHaveLength(9);
     expect(slots[0].textContent).toContain('canned beans');
     expect(slots[0].querySelector('.hud-slot-count')?.textContent).toBe('3');
+    expect([...document.querySelectorAll('.hud-hotbar-key')].map(e => e.textContent)).toEqual(['1','2','3','4','5','6','7','8','9','0']);
+    expect(document.querySelector('.hud-hotbar')!.textContent).not.toContain('portable toolbox bench');
+  });
+
+  it('assigns a backpack item to 0 by swapping, without consuming food or losing stacks', () => {
+    const { hud } = setup();
+    const inv = createInventory();
+    inv.slots[11] = { id: 'basic_bench', count: 1 };
+    inv.slots[9] = { id: 'canned_beans', count: 3 };
+    const consume = vi.fn(), activate = vi.fn();
+    hud.setConsumeHandler(consume);
+    hud.setHotbarHandler(activate);
+    hud.setInventory(inv);
+    hud.toggleInventory();
+    document.querySelector<HTMLButtonElement>('[aria-label="Assign portable toolbox bench to hotbar"]')!.click();
+    expect(hud.assignHotbar(9)).toBe(true);
+    expect(inv.slots[9]).toEqual({ id: 'basic_bench', count: 1 });
+    expect(inv.slots[11]).toEqual({ id: 'canned_beans', count: 3 });
+    expect(consume).not.toHaveBeenCalled();
+    expect(hud.assignHotbar(0)).toBe(false);
+    hud.toggleInventory();
+    document.querySelector<HTMLButtonElement>('.hud-hotbar-slot:nth-child(10)')!.click();
+    expect(activate).toHaveBeenCalledWith(9);
+    hud.setActiveHotbar(9);
+    expect(document.querySelector('.hud-hotbar-slot.selected')!.getAttribute('aria-label')).toContain('portable toolbox bench');
   });
 
   it('calls the consume handler when a food or drink slot is clicked, and not for other items', () => {

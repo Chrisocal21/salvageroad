@@ -1,3 +1,4 @@
+import { bedRoom } from './bedCapacity';
 import { ITEMS } from '../data/items';
 
 // What the player carries: a fixed number of slots, each holding one kind of item up to its stack size.
@@ -8,6 +9,7 @@ export interface ItemStack {
 }
 
 export interface Inventory {
+  storage?: 'vehicle';
   slots: (ItemStack | null)[];
 }
 
@@ -21,7 +23,8 @@ export function createInventory(slotCount = INVENTORY_SLOTS): Inventory {
 export function addItem(inv: Inventory, id: string, count: number): number {
   const def = ITEMS[id];
   if (!def) throw new Error(`Unknown item: ${id}`);
-  let left = count;
+  const accepted = inv.storage === 'vehicle' ? Math.min(count, bedRoom(inv, id)) : count;
+  let left = accepted;
   for (const slot of inv.slots) {
     if (left <= 0) break;
     if (slot && slot.id === id && slot.count < def.stack) {
@@ -37,7 +40,7 @@ export function addItem(inv: Inventory, id: string, count: number): number {
       left -= put;
     }
   }
-  return left;
+  return left + count - accepted;
 }
 
 export function countItem(inv: Inventory, id: string): number {

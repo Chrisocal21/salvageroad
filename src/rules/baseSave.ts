@@ -15,7 +15,7 @@ export function serializeLayout(layout: Layout): string {
 }
 
 /** Adds the saved pieces to the (empty) layout. Bad or missing text loads nothing. Returns how many were added. */
-export function loadLayout(layout: Layout, raw: string | null): number {
+export function loadLayout(layout: Layout, raw: string | null, ids?: Map<number, number>): number {
   if (!raw) return 0;
   let saved: Saved[];
   try {
@@ -34,7 +34,10 @@ export function loadLayout(layout: Layout, raw: string | null): number {
     const piece = addPiece(layout, spec);
     if (!piece) continue;
     added++;
-    if (id !== undefined) newId.set(id, piece.id);
+    if (id !== undefined) {
+      newId.set(id, piece.id);
+      ids?.set(id, piece.id);
+    }
     if (owner !== undefined) owned.push([piece, owner]);
   }
   for (const [piece, oldOwner] of owned) {

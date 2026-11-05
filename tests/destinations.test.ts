@@ -7,6 +7,9 @@ import { reachableContainers, storeAt } from '../src/rules/town';
 import { generateWorld, isDryFootprint } from '../src/rules/world';
 import { planPlaces } from '../src/rules/places';
 import { planRoads } from '../src/rules/roads';
+import { rigSpawns } from '../src/rules/rigBuild';
+import { distanceToObb } from '../src/rules/geometry';
+import { trailerSpawn } from '../src/rules/trailer';
 
 const plan: Plan = {
   places: [
@@ -27,6 +30,12 @@ it.each([1, 7, 42])('places every real-world destination clear of all formations
   const places = planPlaces(world), roads = planRoads(world, places);
   const sites = generateDestinations(seed, places, roads, 100000, world);
   expect(sites.filter(s => s.siteKind === 'salvage')).toHaveLength(3);
+  const rigs = rigSpawns(sites);
+  expect(rigs).toHaveLength(2);
+  const trailer = trailerSpawn(sites);
+  expect(rigs.every(r => Math.hypot(r.x - trailer.x, r.z - trailer.z) > 100)).toBe(true);
+  expect(sites.filter(s => s.salvage).at(-1)!.salvage!.yard.wrecks.every(w => w.model !== 'big-rig')).toBe(true);
+  expect(rigs.every(r => distanceToObb(world.settlement.town.x, world.settlement.town.z, r) > 150)).toBe(true);
   expect(sites).toHaveLength(places.places.filter(p => !['city', 'town', 'village'].includes(p.kind)).length);
   const ids = sites.flatMap(s => [...s.buildings, ...s.containers].map(b => b.id));
   expect(new Set(ids).size).toBe(ids.length);
@@ -64,7 +73,11 @@ it('makes differentiated road-end facilities with unique loot and unobstructed d
     expect(s.solids.some(b => Math.abs(s.center.x - b.x) < b.hx + 5 && Math.abs(s.center.z - b.z) < b.hz + 5)).toBe(false);
   }
   expect(sites[0].fixtures!.length).toBeGreaterThan(8);
-  expect(sites[1].salvage!.yard.wrecks).toHaveLength(5);
+  expect(sites[1].salvage!.yard.wrecks).toHaveLength(6);
+  expect(sites[1].salvage!.yard.wrecks.filter(w => w.model === 'big-rig')).toHaveLength(1);
+  const [rig] = rigSpawns(sites);
+  expect(sites[1].solids.some(box => Math.abs(rig.x - box.x) < rig.hx + box.hx &&
+    Math.abs(rig.z - box.z) < rig.hz + box.hz)).toBe(false);
   expect(sites[1].salvage!.yard.fence).toHaveLength(5);
   expect(sites[1].salvage!.yard.parts).toEqual([]);
   expect(plan.places[1].name).toMatch(/Salvage Yard$/);

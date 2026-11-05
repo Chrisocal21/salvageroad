@@ -41,7 +41,7 @@ function corrugationTexture(): THREE.CanvasTexture {
 /** A box of the container's size. Texture coordinates run along the ribs at real-world scale. */
 function containerBoxGeometry(kind: ShippingKind): THREE.BoxGeometry {
   const def = SHIPPING.kinds[kind];
-  const lx = def.long * SHIPPING.cell;
+  const lx = def.length;
   const lz = def.wide * SHIPPING.cell;
   const g = new THREE.BoxGeometry(lx, SHIPPING.height, lz);
   const uv = g.attributes.uv;
@@ -64,7 +64,7 @@ export interface Pick {
 export interface BaseView {
   group: THREE.Group;
   /** Rebuild what is drawn from the layout. Call after any change. */
-  sync(layout: Layout): void;
+  sync(layout: Layout, modifiedContainers?: ReadonlySet<number>): void;
   /** Call every frame: picks which containers get the full model, based on the camera. */
   update(camera: THREE.Camera): void;
   pick(raycaster: THREE.Raycaster): Pick | null;
@@ -77,8 +77,8 @@ export interface BaseView {
   modelReady: Promise<boolean>;
 }
 
-const PICK_KINDS: PieceKind[] = ['ft20', 'ft40', 'pillar'];
-const SHIP_KINDS: ShippingKind[] = ['ft20', 'ft40'];
+const PICK_KINDS: PieceKind[] = ['ft10', 'ft20', 'ft40', 'pillar'];
+const SHIP_KINDS: ShippingKind[] = ['ft10', 'ft20', 'ft40'];
 
 interface Item {
   id: number;
@@ -98,6 +98,7 @@ export function createBaseView(capacity = 8000): BaseView {
   const invisible = new THREE.MeshBasicMaterial();
   const pw = SHIPPING.pillarWidth;
   const boxGeometry = {
+    ft10: containerBoxGeometry('ft10'),
     ft20: containerBoxGeometry('ft20'),
     ft40: containerBoxGeometry('ft40'),
   } satisfies Record<ShippingKind, THREE.BoxGeometry>;
@@ -114,15 +115,18 @@ export function createBaseView(capacity = 8000): BaseView {
 
   // Aiming boxes: never drawn, only ray tested. The pillars are drawn as well as ray tested.
   const pickMeshes = {
+    ft10: instanced(boxGeometry.ft10, invisible, capacity, false),
     ft20: instanced(boxGeometry.ft20, invisible, capacity, false),
     ft40: instanced(boxGeometry.ft40, invisible, capacity, false),
     pillar: instanced(pillarGeometry, pillarMaterial, capacity * 2, true),
   } satisfies Record<PieceKind, THREE.InstancedMesh>;
+  pickMeshes.ft10.visible = false;
   pickMeshes.ft20.visible = false;
   pickMeshes.ft40.visible = false;
-  const pickIds = { ft20: [] as number[], ft40: [] as number[], pillar: [] as number[] };
+  const pickIds = { ft10: [] as number[], ft20: [] as number[], ft40: [] as number[], pillar: [] as number[] };
   // Distant containers, drawn as boxes.
   const farMeshes = {
+    ft10: instanced(boxGeometry.ft10, boxMaterial, capacity, true),
     ft20: instanced(boxGeometry.ft20, boxMaterial, capacity, true),
     ft40: instanced(boxGeometry.ft40, boxMaterial, capacity, true),
   };
@@ -176,6 +180,7 @@ export function createBaseView(capacity = 8000): BaseView {
   ghost.renderOrder = 10;
   group.add(ghost);
   const edgeGeometry = {
+    ft10: new THREE.EdgesGeometry(boxGeometry.ft10),
     ft20: new THREE.EdgesGeometry(boxGeometry.ft20),
     ft40: new THREE.EdgesGeometry(boxGeometry.ft40),
     pillar: new THREE.EdgesGeometry(pillarGeometry),
@@ -238,8 +243,7 @@ export function createBaseView(capacity = 8000): BaseView {
     const cz = camera.matrixWorld.elements[14];
     const r2 = DETAIL_RADIUS * DETAIL_RADIUS;
     let near = 0;
-    let far20 = 0;
-    let far40 = 0;
+    const farCounts: Record<ShippingKind, number> = { ft10: 0, ft20: 0, ft40: 0 };
     for (const r of records) {
       const dx = r.x - cx;
       const dy = r.y - cy;
@@ -252,16 +256,14 @@ export function createBaseView(capacity = 8000): BaseView {
       }
       if (detailed) {
         for (const mat of r.model) if (near < MODEL_CAPACITY) modelMesh!.setMatrixAt(near++, mat);
-      } else if (r.kind === 'ft20') {
-        farMeshes.ft20.setMatrixAt(far20++, r.box);
       } else {
-        farMeshes.ft40.setMatrixAt(far40++, r.box);
+        farMeshes[r.kind].setMatrixAt(farCounts[r.kind]++, r.box);
       }
     }
-    farMeshes.ft20.count = far20;
-    farMeshes.ft40.count = far40;
-    farMeshes.ft20.instanceMatrix.needsUpdate = true;
-    farMeshes.ft40.instanceMatrix.needsUpdate = true;
+    for (const kind of SHIP_KINDS) {
+      farMeshes[kind].count = farCounts[kind];
+      farMeshes[kind].instanceMatrix.needsUpdate = true;
+    }
     if (modelMesh) {
       modelMesh.count = near;
       modelMesh.instanceMatrix.needsUpdate = true;
@@ -272,7 +274,7 @@ export function createBaseView(capacity = 8000): BaseView {
   return {
     group,
     modelReady,
-    sync(layout) {
+    sync(layout, modifiedContainers) {
       lookup.clear();
       for (const k of PICK_KINDS) pickIds[k].length = 0;
       records = [];
@@ -284,6 +286,7 @@ export function createBaseView(capacity = 8000): BaseView {
         ids.push(piece.id);
         lookup.set(piece.id, piece);
         if (piece.kind === 'pillar') continue;
+        if (modifiedContainers?.has(piece.id)) continue;
         const kind = piece.kind;
         const { w, d } = footprint(kind, piece.rot);
         const x = (piece.gx + w / 2) * SHIPPING.cell;
@@ -302,7 +305,7 @@ export function createBaseView(capacity = 8000): BaseView {
           model: shifts.map((s) => {
             offset.set(s, 0, 0).applyQuaternion(q);
             pos.set(x, y, z).add(offset);
-            return new THREE.Matrix4().compose(pos, q, one);
+            return new THREE.Matrix4().compose(pos, q, kind === 'ft10' ? new THREE.Vector3(.5, 1, 1) : one);
           }),
         });
       }

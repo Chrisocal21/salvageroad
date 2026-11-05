@@ -1,5 +1,55 @@
 # Decisions Log
 
+## Equipped-hammer removal confirmation
+
+The hammer hotbar key now equips it without opening the workshop; K remains the build-menu key. On foot, aim within 3 m and right-click a wood piece to open a confirmation, even without an active placement recipe. Cancel/Escape does nothing; only Confirm removal mutates the layout. Toolbox benches return to inventory; ordinary wood pieces explicitly warn that materials are not refunded. Existing support checks and full-pack protection remain authoritative when confirming. World input and movement stop while the confirmation is open.
+
+## Compact salvage-survival HUD and menu system
+
+Chris found the placement overlay far too large and requested a cohesive, polished HUD/UI suited to the game.
+
+- Use shared graphite/olive surfaces, ivory text, amber accents, restrained borders and original SVG item icons. Keep the world readable rather than filling it with permanent instructions.
+- Replace the large placement panel with a compact lower-right card: selected piece, cost, placement verdict, level where relevant and concise input hints. Keep exactly ten icon hotbar slots; item labels appear on selection, hover or keyboard focus.
+- Group the field workshop into Construction, Benches, Crafting and Containers tabs. Put longer instructions in a keyboard-accessible field guide. Preserve actual resource costs, bench requirements and physical container cargo.
+- Give inventory/cargo explicit close controls and consistent modal framing; suppress background HUD clutter and block world actions while either is open. Storage closing still runs the game's cargo/door cleanup. Bring barter, pause and vehicle restoration into the same visual language, including restoration progress and scrolling parts.
+- Move the minimap above the placement/speed area. Add region-map identity, coordinates, an explicit close action and keyboard activation while preserving travel-on-click.
+
+Browser measurements: placement is 286 x 129 px at 1366 x 768 and 235 x 125 px at 390 x 844, with no horizontal overflow or overlap with the hotbar/needs. Checked inventory and categorized workshop screenshots and narrow-screen scrolling without changing player inventory or saved buildings. Regression coverage includes accessible tab switching, visible-only focus traversal, field-guide access, original recipe gates, hotbar assignment and construction/vehicle behavior.
+
+## Ten-key hotbar and direct placeable selection
+
+Chris clarified that the bottom bar must have only keyboard 1-0 slots, with the remaining carried items in inventory, and that pressing a bench/placeable's number should equip it for placement.
+
+- Kept existing inventory capacity and made its first ten slots the numbered hotbar; reserve slots remain inventory-only. Inventory Assign buttons plus a number/hotbar click swap whole stacks, preserving occupied destinations and existing click-to-consume behavior.
+- Number keys now equip/use hotbar items. Portable toolbox benches directly start the existing placement path, with no hammer requirement. A planer selects the planer-bench recipe, preserving its material/tool costs. Hammer selection opens the build menu. Empty selections unequip, selected slots highlight, and consumed placeables stop previewing.
+- Reserved number keys for the hotbar rather than competing container-cargo shortcuts. K still selects actual hauled cargo; mouse placement, rotations and nearby stopped-trailer requirements remain unchanged.
+
+Validation includes keyboard 0 mapping to slot ten, exactly ten HUD slots, reserve-slot hiding, lossless assignment, consumption isolation, selected-state rendering and existing building/gameplay tests.
+
+## Unified wood building, logging and starter benches
+
+Chris requested a build menu beside container hauling, initially wood-only doors, windows, decks, railings, garage doors, floors, walls and stairs, with scrap-metal upgrades later. He confirmed grid/container snapping, actual cut openings, and a crafted build hammer. He then requested axe/log/plank progression, a placed planer bench, and a basic portable toolbox bench placed from inventory or the car.
+
+- K unifies wood pieces, crafting and the actual flatbed container manifest. Container placement still requires the stopped hooked flatbed nearby; containers are not conjured by the menu.
+- Town containers and ground log piles supply logs; axes and planers can be looted or crafted. The starter toolbox guarantees tools and a portable toolbox bench to avoid progression deadlocks.
+- Portable toolbox benches consume one kit, need no hammer, can be deployed on flat ground at their own elevation anywhere, and pack back up atomically. Nearby car/box-truck item storage can supply building materials. Further bench types were not specified and remain unimplemented.
+- Tool recipes require the deployed toolbox nearby. A hammer costs one log by hand. A planer bench costs six logs plus a planer; one log processes into four planks only beside that bench. Building uses planks, not raw logs. Axe trees with three E interactions for four logs; full packs prevent the final chop rather than losing logs.
+- Door/window installations replace the corresponding container wall section with wooden frames/leaves, not an intact steel wall behind decoration. Rendering and collisions share the same shell rectangles. E opens/closes doors/shutters; garage openings admit the El Cajon. Wood stairs/floors and container roofs support walking.
+- Save built pieces, portable bench elevation, host-container references and door states. Remap host IDs on loading. Keep the existing session-only inventory/world-loot/vehicle policy explicit; trees respawn on reload. Dismantling ordinary wood parts gives no refund. No metal upgrades or new imported art.
+
+Validation covers placement costs, support/removal, opened versus closed door/garage collisions, physical driving through garage doors, actual walking-circle stair climbing, crafting overflow, harvested tree collider removal, loot guarantees, portable bench retrieval and save/load. Browser checks cover the unified menu and a separate rendered container/deck/stair/door/window preview.
+
+## Box-truck reference redesign
+
+Chris supplied 18 delivery-truck examples, including conventional and cab-over trucks, because the first storage truck did not look like a box truck.
+
+- Chose a generic short-hood, two-axle delivery truck with rear dual tires. The 5.4 m cargo body occupies over 60% of the vehicle length and rises above the cab.
+- Added plain white panels, aluminum edge rails and rivets, mirrors, curved fenders, reflective strips, mudflaps, rear hinges/latches, wood flooring, interior tie rails and roof bows. No logos, watermarks or imported assets.
+- Retained a battered cargo shell so the unrestored vehicle is recognizable; replacing each section hides its matching damaged piece independently.
+- Matched suspension and restoration to two axles: four suspension wheels, six tires, four brake assemblies, 37 installed pieces across 23 component types. Kept independent 96-slot storage and the tractor-only trailer restriction. Vehicle progress and cargo remain session-only.
+
+Validation includes production build/typecheck, restoration/storage/hauling regression tests, collider/proportion checks, and separate browser previews of the damaged front/side and restored rear. Previewing did not change the player's truck or inventory.
+
 ## Sunrise trader: tools/parts and brick workshop
 
 Chris specified that the starting trader sells tools and vehicle parts and asked to move him into the existing brick building shown in four screenshots.

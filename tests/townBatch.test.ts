@@ -14,7 +14,7 @@ it('batches static geometry in world space without consuming openable loot', () 
   const stock = new THREE.Mesh(new THREE.BoxGeometry(), material);
   stock.userData.lootDynamic = true;
   group.add(stock);
-  const view = { group, markOpened: () => { stock.visible = false; } };
+  const view = { group, markOpened: () => { stock.visible = false; }, removeTree: () => {} };
   const batched = batchTownScenery([view]);
   expect(batched.children).toHaveLength(1);
   expect(group.children).toEqual([stock]);

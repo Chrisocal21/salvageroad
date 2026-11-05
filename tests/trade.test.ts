@@ -17,7 +17,7 @@ describe('barter', () => {
     for (const seed of [1, 7, 42]) {
       const t = makeTrader(seed, 0, 'tools-parts');
       expect(t.specialty).toBe('tools-parts');
-      expect(t.stock.map(s => s.id)).toEqual(['wrench', 'tire', 'motor', 'rig_tire']);
+      expect(t.stock.map(s => s.id)).toEqual(['wrench', 'tire', 'motor', 'rig_tire', 'rig_battery', 'rig_fuel_tank', 'rig_steering']);
       expect(t.stock.every(s => s.count > 0 && ['tool', 'part'].includes(ITEMS[s.id].kind))).toBe(true);
       expect(t).toEqual(makeTrader(seed, 0, 'tools-parts'));
     }

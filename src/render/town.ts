@@ -12,10 +12,12 @@ export interface TownView {
   group: THREE.Group;
   /** Call when a container has been opened, so it looks used: boxes darken, shelves are emptied. */
   markOpened(id: number): void;
+  removeTree(x: number, z: number): void;
 }
 
 export function createTownView(town: Town, groundY = 0, surface?: (x: number, z: number) => number): TownView {
   const group = new THREE.Group();
+  const treeMeshes = new Map<string, THREE.Object3D[]>();
   group.position.y = groundY; // the town stands on level ground at this height
 
   const roadMat = worldMaterial('asphalt', { color: 0x888888 });
@@ -66,6 +68,8 @@ export function createTownView(town: Town, groundY = 0, surface?: (x: number, z:
       crown.position.set(tree.x, tree.height - tree.radius, tree.z);
       crown.scale.y = 1.2;
       crown.castShadow = true;
+      trunk.userData.lootDynamic = crown.userData.lootDynamic = true;
+      treeMeshes.set(`${tree.x},${tree.z}`, [trunk, crown]);
       group.add(trunk, crown);
     }
   }
@@ -186,6 +190,22 @@ export function createTownView(town: Town, groundY = 0, surface?: (x: number, z:
 
   const opened = new Map<number, () => void>();
   for (const c of town.containers) {
+    if (c.kind === 'wood_bundle') {
+      const bundle = new THREE.Group();
+      const material = worldMaterial('wood', { color: CONTAINERS[c.kind].color });
+      for (let n = 0; n < 6; n++) {
+        const log = new THREE.Mesh(new THREE.CylinderGeometry(.075, .085, c.hx * 1.9, 8), material);
+        log.position.set(c.x + (n % 2 ? .03 : -.03), .08 + Math.floor(n / 3) * .13, c.z + (n % 3 - 1) * .17);
+        log.rotation.z = Math.PI / 2;
+        log.rotation.y = n % 3 * .025;
+        log.userData.lootDynamic = true;
+        bundle.add(log);
+      }
+      bundle.userData.lootDynamic = true;
+      group.add(bundle);
+      opened.set(c.id, () => { material.color.multiplyScalar(.45); });
+      continue;
+    }
     if (c.kind === 'market_shelf' || c.kind === 'hardware_shelf') {
       const shelf = createShelf(c, town.buildings[c.inside!]);
       group.add(shelf.group);
@@ -212,6 +232,10 @@ export function createTownView(town: Town, groundY = 0, surface?: (x: number, z:
 
   return {
     group,
+    removeTree(x, z) {
+      for (const mesh of treeMeshes.get(`${x},${z}`) ?? []) mesh.visible = false;
+      treeMeshes.delete(`${x},${z}`);
+    },
     markOpened(id) {
       opened.get(id)?.();
       opened.delete(id); // only once

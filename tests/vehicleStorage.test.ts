@@ -41,3 +41,33 @@ describe('vehicle storage', () => {
     expect(pack.slots.every((s) => s === null)).toBe(true);
   });
 });
+
+describe('bed capacity', () => {
+  it('limits mixed tires to four and leaves partial transfers in the pack', () => {
+    const bed = createStorage(), pack = createInventory();
+    addItem(bed, 'rig_tire', 3); addItem(pack, 'tire', 4);
+    expect(moveStack(pack, 0, bed).moved).toBe(1);
+    expect(countItem(pack, 'tire')).toBe(3);
+    expect(addItem(bed, 'rig_tire', 1)).toBe(1);
+    moveStack(bed, 0, pack);
+    expect(moveStack(pack, 0, bed).moved).toBe(1);
+  });
+  it('fits four tires plus 24 cargo stacks and rejects excess without losing it', () => {
+    const bed = createStorage();
+    expect(addItem(bed, 'rig_tire', 4)).toBe(0);
+    expect(addItem(bed, 'wrench', 25)).toBe(1);
+    expect(countItem(bed, 'wrench')).toBe(24);
+    expect(addItem(bed, 'motor', 1)).toBe(1);
+  });
+  it('allows topping up existing stacks and replaces twelve cargo stacks with one engine', () => {
+    const bed = createStorage();
+    addItem(bed, 'motor', 1);
+    expect(addItem(bed, 'wrench', 11)).toBe(0);
+    expect(addItem(bed, 'canned_beans', 1)).toBe(0);
+    expect(addItem(bed, 'canned_beans', 1)).toBe(0);
+    expect(addItem(bed, 'water_bottle', 1)).toBe(1);
+    expect(addItem(bed, 'motor', 1)).toBe(1);
+    const empty = createStorage();
+    expect(addItem(empty, 'motor', 3)).toBe(1);
+  });
+});

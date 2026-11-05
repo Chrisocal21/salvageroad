@@ -1,0 +1,36 @@
+:root {
+  --ui-bg: #111918;
+  --ui-panel: #17201f;
+  --ui-raised: #202b28;
+  --ui-edge: #ffffff19;
+  --ui-text: #e8e9df;
+  --ui-muted: #a4afa6;
+  --ui-accent: #d3b075;
+  --ui-good: #a4c4a4;
+  --ui-bad: #eca58b;
+  --ui-shadow: 0 24px 80px #0008;
+  --ui-font: 'Segoe UI', system-ui, sans-serif;
+}
+
+.ui-eyebrow { color: var(--ui-accent); font: 600 10px/1.5 var(--ui-font); letter-spacing: .2em; text-transform: uppercase; }
+.ui-icon { width: 24px; height: 24px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ui-button {
+  min-height: 36px; padding: 8px 14px; border: 1px solid var(--ui-edge); border-radius: 3px;
+  background: #ffffff06; color: var(--ui-text); font: 600 12px var(--ui-font); cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.ui-button:hover:not(:disabled) { background: #d3b07516; border-color: #d3b07580; }
+.ui-button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.ui-button:disabled { color: #a4afa675; cursor: not-allowed; }
+.ui-button.primary { background: var(--ui-accent); color: #17201b; border-color: var(--ui-accent); }
+.ui-button.primary:hover:not(:disabled) { background: #e4c58e; }
+.ui-button.primary:disabled { background: #d3b07530; border-color: transparent; color: var(--ui-muted); }
+.ui-close { margin-left: auto; }
+.ui-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.ui-panel-header h1 { margin: 3px 0; color: var(--ui-text); font: 600 28px/1.2 var(--ui-font); letter-spacing: -.03em; }
+.ui-section-label { margin: 0; color: var(--ui-muted); font: 600 10px/1.5 var(--ui-font); letter-spacing: .14em; text-transform: uppercase; }
+.ui-kbd { display: inline-flex; min-width: 21px; justify-content: center; padding: 2px 5px; border: 1px solid #ffffff25; border-bottom-width: 2px; border-radius: 3px; font: 600 10px/1.2 var(--ui-font); color: var(--ui-text); }
+.ui-empty { padding: 24px 16px; border: 1px dashed var(--ui-edge); color: var(--ui-muted); font: 12px/1.6 var(--ui-font); text-align: center; }
+@media (prefers-reduced-motion: reduce) {
+  .ui-button { transition: none; }
+}

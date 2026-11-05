@@ -1,3 +1,8 @@
+import { createRigRuntime } from './render/rigRuntime';
+import { createFlatbed } from './render/flatbed';
+import { containerLength, loadTrailerContainer, TRAILER, trailerSpawn } from './rules/trailer';
+import { createRigWorkshop } from './ui/rigWorkshop';
+import { distributeRigParts, rigSpawns } from './rules/rigBuild';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Bench, formatReport, scriptedInput } from './bench';
@@ -20,8 +25,8 @@ import { ITEMS } from './data/items';
 import { consume, consumeSlot, createSurvival, isWeak, stepSurvival, SURVIVAL } from './rules/survival';
 import { describeStacks, newContainerState, openContainer } from './rules/loot';
 import { summarizeFrames } from './rules/perfStats';
-import { PROP_COLLIDER } from './rules/scatter';
-import { insideWorkshop, LOT, reachableContainers, settlementGrid } from './rules/town';
+import { PROP_COLLIDER, type Prop } from './rules/scatter';
+import { insideWorkshop, LOT, reachableContainers, salvageYardStops, settlementGrid } from './rules/town';
 import { generateSettlements, settlementPlaces as getSettlementPlaces } from './rules/settlements';
 import { generateDestinations, installDestinationGround } from './rules/destinations';
 import { lookWalker, stepWalker, WALKER, type Walker } from './rules/walker';
@@ -42,7 +47,27 @@ import { createBaseView } from './render/baseView';
 import { aimToSpec } from './rules/baseAim';
 import { addPiece, checkRemove, createLayout, planPlace, removePiece, type PieceSpec, type PlacePlan, type Rotation } from './rules/baseBuild';
 import { GAME_BASE_STORAGE_KEY, loadLayout, serializeLayout } from './rules/baseSave';
-import { layoutBoxes, siteProblem, walkingSolids } from './rules/baseWorld';
+import { layoutBoxes, pieceBox, siteProblem, walkingSolids } from './rules/baseWorld';
+import { aimWood, checkWood, containerShells, createWoodLayout, isBench, isOpening, loadWood, pickupBasicBench, placeWood, removeWood, woodBounds, woodBoxes, woodSurface, woodMaterials, WOOD_PARTS, type WoodKind, type WoodSpec } from './rules/woodBuild';
+import { createWoodView } from './render/woodView';
+import { createWoodBuildMenu } from './ui/woodBuildMenu';
+import { createRemovalDialog } from './ui/removalDialog';
+import { craftBuildHammer } from './rules/buildHammer';
+import { countItem } from './rules/inventory';
+import { craftWoodTool, planeLog } from './rules/woodCraft';
+import { chopTree, type HarvestTree } from './rules/treeHarvest';
+import { hotbarIndex } from './rules/hotbar';
+
+let woodMenu: ReturnType<typeof createWoodBuildMenu> | undefined;
+let removalDialog: ReturnType<typeof createRemovalDialog> | undefined;
+let woodBuilding = false;
+let selectedWood: WoodKind = 'floor';
+let woodTurn = 0;
+let woodSpec: WoodSpec | null = null;
+let woodProblem: string | null = null;
+let walkingHeight: number | null = null;
+let activeHotbar: number | null = null;
+let activeHotbarItem: string | null = null;
 
 // You wake up in the desert. Over the dune is a town: food and water in its boxes and stores, and in its junkyard
 // the El Cajon, stripped, its parts lying round the yard. Find the wrench, carry the parts over one at a time and
@@ -51,7 +76,7 @@ import { layoutBoxes, siteProblem, walkingSolids } from './rules/baseWorld';
 // Driving: W/S gas and brake, A/D steer, Space handbrake.
 // Unloading containers: pull up and press U. You get out and the crosshair shows where the next container goes.
 // Click puts it down, right-click picks one back up onto the truck, R rotates, the mouse wheel (or PageUp/PageDown)
-// sets the height, 1-9 choose which container, U finishes.
+// sets the height, K chooses hauled containers, U finishes. 1-0 equip items from the ten-slot hotbar.
 // Fly mode, for testing and looking around: G turns it on and off. W/A/S/D fly, Q/E down and up, Shift faster, wheel changes speed,
 // T lands you on foot where you are. Nothing collides, nothing gets hungry, the truck stays parked.
 // Always: R reset (rotate, while unloading), B performance run, J jump to the town (testing: the street outside the junkyard).
@@ -65,6 +90,8 @@ const params = new URLSearchParams(location.search);
 const propCount = Math.max(0, Number(params.get('objects') ?? 1500) | 0);
 
 const hud = createHud(document.body);
+let rigDriving = false;
+let rigWorkshop: ReturnType<typeof createRigWorkshop> | undefined;
 const benchPanel = document.getElementById('bench') as HTMLElement;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -128,6 +155,31 @@ const startingTrader = makeTrader(SEED, 0, 'tools-parts');
 const destinations = generateDestinations(SEED, plan, network, settlements.reduce((n, s) => n + s.containers.length, 0), worldMap);
 installDestinationGround(ground, destinations);
 settlements.push(...destinations);
+const rigSources = distributeRigParts(settlements);
+const remoteRigSpawns = rigSpawns(settlements);
+const freightSources = destinations.filter(s => s.siteKind === 'dock').map(site => {
+  const layout = createLayout();
+  const fixtures = site.fixtures!.filter(f => f.height < 6).slice(0, 2);
+  fixtures.forEach((fixture, i) => {
+    const kind = i === 0 ? 'ft20' : 'ft10';
+    const def = SHIPPING.kinds[kind];
+    const piece = addPiece(layout, { kind, gx: Math.round(fixture.x / SHIPPING.cell - def.wide / 2),
+      gz: Math.round(fixture.z / SHIPPING.cell - def.long / 2), level: 0, rot: 1, color: i });
+    if (!piece) throw new Error(`Could not place dock container at ${fixture.x},${fixture.z}`);
+  });
+  site.fixtures = site.fixtures!.filter(f => !fixtures.includes(f));
+  site.solids = site.solids.filter(s => !fixtures.some(f => f === s));
+  return { layout, y: site.groundY!, view: createBaseView(16) };
+});
+for (const source of freightSources) {
+  source.view.group.position.y = source.y;
+  source.view.sync(source.layout);
+  scene.add(source.view.group);
+}
+const flatbedSpawn = trailerSpawn(settlements);
+const flatbed = createFlatbed(flatbedSpawn, ground.surface(flatbedSpawn.x, flatbedSpawn.z));
+scene.add(flatbed.model);
+let towingRig: typeof rigs[number] | null = null;
 const displayPlaces = plan.places.map(p => {
   const site = destinations.find(s => s.placeId === p.id);
   return site ? { ...p, x: site.center.x, z: site.center.z, height: site.groundY! } : p;
@@ -141,8 +193,13 @@ scene.add(createRoadMesh(worldMap, network, ground.height));
 scene.add(createPlaceMarkers(displayPlaces, ground.height));
 // Build the ground round the start in one go, so nothing pops in on the first frame.
 terrainTiles.update(new THREE.Vector3(playerSpawn.x, ground.height(playerSpawn.x, playerSpawn.z) + 2, playerSpawn.z), Infinity);
-createProps(props, ground.height).forEach((o) => scene.add(o));
+const propViews = createProps(props, ground.height);
+propViews.forEach((o) => scene.add(o));
 const townViews = settlements.map((s, i) => createTownView(s, s.groundY ?? (i === 0 ? townSite.height : settlementPlaces[i - 1].height), s.siteKind ? ground.height : undefined));
+const harvestTrees: (HarvestTree & { prop?: Prop; townIndex?: number })[] = [
+  ...props.filter(p => p.kind === 'tree').map(prop => ({ x: prop.x, z: prop.z, hits: 0, cut: false, prop })),
+  ...settlements.flatMap((s, townIndex) => (s.trees ?? []).map(tree => ({ x: tree.x, z: tree.z, hits: 0, cut: false, townIndex }))),
+];
 scene.add(batchTownScenery(townViews));
 for (const townView of townViews) {
   townView.group.traverse(object => {
@@ -152,17 +209,32 @@ for (const townView of townViews) {
 }
 
 // The player's base: saved in the browser (the game's own save, not the /base/ test page's). It is built on the town's level ground.
-const buildBaseY = townSite.height;
+let buildBaseY = townSite.height;
 const baseLayout = createLayout();
+const woodLayout = createWoodLayout();
+const WOOD_SAVE_KEY = `${GAME_BASE_STORAGE_KEY}.wood.v1`;
+const containerSaveIds = new Map<number, number>();
 try {
-  loadLayout(baseLayout, localStorage.getItem(GAME_BASE_STORAGE_KEY));
+  loadLayout(baseLayout, localStorage.getItem(GAME_BASE_STORAGE_KEY), containerSaveIds);
+  const savedHeight = localStorage.getItem(`${GAME_BASE_STORAGE_KEY}.height`);
+  if (savedHeight !== null && Number.isFinite(Number(savedHeight))) buildBaseY = Number(savedHeight);
 } catch {
   /* storage may be blocked; the game still works */
 }
 const baseView = createBaseView();
 baseView.group.position.y = buildBaseY;
 scene.add(baseView.group);
-baseView.sync(baseLayout);
+try {
+  loadWood(woodLayout, baseLayout, localStorage.getItem(WOOD_SAVE_KEY), containerSaveIds);
+} catch (error) {
+  console.error('Could not restore wood buildings', error);
+}
+const woodView = createWoodView();
+woodView.group.position.y = buildBaseY;
+scene.add(woodView.group);
+const modifiedContainers = () => new Set(woodLayout.pieces.flatMap(p => p.containerId === undefined ? [] : [p.containerId]));
+baseView.sync(baseLayout, modifiedContainers());
+woodView.sync(woodLayout, baseLayout);
 // The shipping container standing in the junkyard: part of the world, drawn the same way as the base's containers,
 // but kept apart from the base (not saved, not edited). Its walls are in town.solids, so you cannot walk or drive through it.
 const cargoLayout = createLayout();
@@ -172,7 +244,10 @@ cargoView.group.position.y = buildBaseY;
 scene.add(cargoView.group);
 cargoView.sync(cargoLayout);
 /** The base's solid blocks, lifted to the height of the ground it stands on. */
-const baseBoxes = () => layoutBoxes(baseLayout).map((box) => ({ ...box, y0: box.y0 + buildBaseY }));
+const baseBoxes = () => [
+  ...[...containerShells(baseLayout, woodLayout), ...woodBoxes(woodLayout)].map((box) => ({ ...box, y0: box.y0 + buildBaseY })),
+  ...freightSources.flatMap(source => layoutBoxes(source.layout).map(box => ({ ...box, y0: box.y0 + source.y }))),
+];
 const worldSpec = {
   ground: (x: number, z: number) => ground.surface(x, z), // what the truck drives on: roads and bridge decks included
   props,
@@ -197,8 +272,8 @@ const walkSolids: Box2[] = [
 // The player's own base blocks walking too. staticSolids is the world as it was found, and what new pieces must not overlap.
 const staticSolids = walkSolids.slice();
 function rebuildBuildSolids() {
-  walkSolids.length = staticSolids.length;
-  walkSolids.push(...walkingSolids(baseLayout));
+  walkSolids.splice(0, walkSolids.length, ...staticSolids);
+  walkSolids.push(...freightSources.flatMap(source => walkingSolids(source.layout)));
 }
 rebuildBuildSolids();
 
@@ -269,7 +344,7 @@ const pickups: Pickup[] = [];
 }
 /** What the player is told when they pick something up that has no use yet. */
 const KEEP_HINTS: Record<string, string> = {
-  rig_tire: 'A big rig tire. Far too big for the El Cajon, but something bigger will need it. Keep it',
+  rig_tire: 'A big rig tire. Keep it for a stripped tractor at a remote salvage yard',
 };
 
 // What the player has in their hands, shown low in front of the camera.
@@ -291,14 +366,22 @@ function holdPart(kind: PartKind | null) {
 
 const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
-  if (hud.isTradeOpen() || hud.isPaused()) return;
+  if (hud.isTradeOpen() || hud.isPaused() || rigWorkshop?.isOpen() || woodMenu?.isOpen() || removalDialog?.isOpen()) return;
   keys.add(e.code);
   if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'Equal' && !e.repeat) {
+    autoRun = !autoRun;
+    say(autoRun ? 'Auto run on (= or S to stop)' : 'Auto run off');
+  }
+  if (autoRun && (e.code === 'KeyS' || e.code === 'ArrowDown')) autoRun = false;
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 
+// The = key holds "forward" for you: running on foot, full throttle in the truck.
+let autoRun = false;
+
 function readInput(): DriveInput {
-  const up = keys.has('KeyW') || keys.has('ArrowUp');
+  const up = autoRun || keys.has('KeyW') || keys.has('ArrowUp');
   const down = keys.has('KeyS') || keys.has('ArrowDown');
   const left = keys.has('KeyA') || keys.has('ArrowLeft');
   const right = keys.has('KeyD') || keys.has('ArrowRight');
@@ -310,10 +393,10 @@ function readInput(): DriveInput {
 }
 
 function readWalkInput() {
-  if (hud.isTradeOpen()) return { forward: 0, right: 0, run: false };
-  const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+  if (hud.isTradeOpen() || hud.isStorageOpen() || hud.isInventoryOpen()) return { forward: 0, right: 0, run: false };
+  const f = (autoRun || keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const r = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-  return { forward: f, right: r, run: keys.has('ShiftLeft') || keys.has('ShiftRight') };
+  return { forward: f, right: r, run: autoRun || keys.has('ShiftLeft') || keys.has('ShiftRight') };
 }
 
 // Game state: where you are, what you carry, which containers have been looted.
@@ -352,7 +435,7 @@ const bed = createStorage();
 bedView.update(bed);
 const survival = createSurvival();
 // Clicking a food or drink in the pack eats or drinks it.
-hud.setConsumeHandler((index) => {
+function useInventorySlot(index: number) {
   const slot = inventory.slots[index];
   const r = consumeSlot(survival, inventory, index);
   if (r.ok) {
@@ -363,18 +446,40 @@ hud.setConsumeHandler((index) => {
   } else if (r.reason === 'inedible') {
     say('That is not food or drink');
   }
-});
+}
+hud.setConsumeHandler(useInventorySlot);
+hud.setHotbarHandler(activateHotbar);
+hud.setStorageCloseHandler(closeBed);
 const containerStates = new Map(allContainers.map((c) => [c.id, newContainerState(c.kind, c.fixedLoot)]));
 function say(text: string) {
   hud.toast(text);
 }
 const PARKED: DriveInput = { throttle: 0, steer: 0, brake: 1 }; // handbrake on while you are out of the truck
 
-let sim: CarSim = await createRapierSim(worldSpec);
+// Build the truck's physics world and the rig's at the same time instead of one after the other.
+const [simInit, rigs] = await Promise.all([
+  createRapierSim(worldSpec),
+  Promise.all(remoteRigSpawns.map(spawn => createRigRuntime(worldSpec, spawn))),
+]);
+let sim: CarSim = simInit;
+if (!rigs.length) throw new Error('No remote salvage-yard rigs were generated');
+let rig = rigs[0];
+const rigWorkshops = rigs.map(vehicle => {
+  scene.add(vehicle.model);
+  return createRigWorkshop({ build: vehicle.build, kind: vehicle.kind, pack: inventory, sources:rigSources,
+  cargo: () => Math.hypot(car.body.position.x-vehicle.model.position.x, car.body.position.z-vehicle.model.position.z) <= 8 ? bed : undefined,
+  changed: () => { vehicle.sync(); hud.setInventory(inventory); bedView.update(bed); },
+  drive: () => { if (!vehicle.complete()) return; rig=vehicle; rigDriving=true; mode='driving'; seat='driver'; keys.clear(); autoRun=false; camReady=false; lookYaw=0; lookPitch=DEFAULT_PITCH; say(`${vehicle.name}: W/S drive, A/D steer, Space brake, E exit${vehicle.storage ? ', Tab cargo storage' : ''}`); },
+  storage: vehicle.storage ? () => openBoxStorage(vehicle) : undefined,
+  });
+});
+
 let resetting = false;
 /** 'town' puts you and the truck back at the town. 'lab' puts the truck on the open test field for the performance run. */
 async function reset(kind: 'town' | 'lab' = 'town') {
   if (resetting) return;
+  rigDriving = false;
+  rigWorkshop?.close();
   resetting = true;
   sim = await createRapierSim(kind === 'town' ? worldSpec : { ...worldSpec, carSpawn: { x: townSite.x + 100, z: townSite.z, yaw: 0 }, buildBoxes: [] });
   prev = curr = takeSnapshot();
@@ -398,6 +503,7 @@ const flyRight = new THREE.Vector3();
 const flyEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
 function toggleFly(landHere = false) {
+  if (rigDriving) getOutOfTruck();
   if (bench.active) return;
   if (!flying) {
     flying = true;
@@ -474,6 +580,7 @@ const mapOverlay = createMapOverlay(document.body, {
       say('Flew there (testing)');
       return;
     }
+    rigDriving = false;
     mode = 'walking';
     camReady = false;
     Object.assign(walker, { x, z, pitch: 0 });
@@ -492,7 +599,7 @@ let lookPitch = DEFAULT_PITCH;
 let lastLook = 0;
 
 renderer.domElement.addEventListener('click', () => {
-  if (hud.isTradeOpen() || hud.isPaused()) return;
+  if (hud.isTradeOpen() || hud.isPaused() || rigWorkshop?.isOpen()) return;
   void renderer.domElement.requestPointerLock();
 });
 window.addEventListener('mousemove', (e) => {
@@ -551,6 +658,24 @@ function truckObb(): Obb2 {
 }
 
 let currentTarget: Target | null = null;
+let storageVehicle: typeof rigs[number] | null = null;
+
+function openBoxStorage(vehicle: typeof rigs[number]) {
+  if (!vehicle.storage || !vehicle.complete()) return say('Finish restoring the box truck before using its cargo storage');
+  if (Math.abs(vehicle.physics.speed()) >= .7) return say('Stop before opening the cargo box');
+  keys.clear(); autoRun = false;
+  storageVehicle = vehicle;
+  vehicle.setCargoOpen(true);
+  document.exitPointerLock();
+  const storage = vehicle.storage;
+  hud.openStorage('Box truck cargo - 96 slots', storage, inventory, (from, index) => {
+    const src = from === 'store' ? storage : inventory, dst = from === 'store' ? inventory : storage;
+    const what = describeMove(src, index), result = moveStack(src, index, dst);
+    if (!result.moved) say(result.reason === 'full' ? (from === 'store' ? 'Your pack is full' : 'The cargo box is full') : 'Nothing there');
+    else say(`${from === 'store' ? 'Took' : 'Stored'} ${result.moved} ${what.replace(/^\d+ /, '')}`);
+    hud.setInventory(inventory); hud.refreshStorage();
+  });
+}
 
 /** fromOutside: opened at the bed, so the tailgate drops. Opened from a seat (Tab), the tailgate stays up. */
 function openBed(fromOutside = true) {
@@ -562,18 +687,21 @@ function openBed(fromOutside = true) {
     const what = describeMove(src, index);
     const r = moveStack(src, index, dst);
     if (r.moved === 0) say(r.reason === 'full' ? (from === 'store' ? 'Your pack is full' : 'The bed is full') : 'Nothing there');
-    else say(`${from === 'store' ? 'Took' : 'Put in the bed:'} ${what}`);
+    else say(`${from === 'store' ? 'Took' : 'Put in the bed:'} ${r.moved} ${what.replace(/^\d+ /, '')}${src.slots[index] ? ' (remainder did not fit)' : ''}`);
     hud.setInventory(inventory);
     bedView.update(bed);
     hud.refreshStorage();
   });
 }
 function closeBed() {
+  storageVehicle?.setCargoOpen(false);
+  storageVehicle = null;
   tailgateOpen = false;
   hud.closeStorage();
 }
 
 function switchSeat() {
+  if (rigDriving) { say(`The ${rig.name} has one driving seat`); return; }
   if (mode !== 'driving' || bench.active) return;
   if (seat === 'passenger') {
     seat = 'driver';
@@ -603,7 +731,7 @@ function interact() {
   }
   if (bench.active || unloading) return;
   if (mode === 'driving') {
-    if (Math.abs(sim.speed()) > 3) {
+    if (Math.abs((rigDriving ? rig.physics : sim).speed()) > 3) {
       say('Slow down to get out');
       return;
     }
@@ -614,6 +742,13 @@ function interact() {
   if (!target) {
     if (carrying) dropPart();
     return;
+  }
+  if (target.kind === 'rig') {
+    if (carrying) { say('Put down the El Cajon part first'); return; }
+    rig = rigs[target.id];
+    rigWorkshop = rigWorkshops[target.id];
+    autoRun = false;
+    keys.clear(); document.exitPointerLock(); rigWorkshop.open(); return;
   }
   if (target.kind === 'trader') {
     if (carrying) {
@@ -770,7 +905,9 @@ function dropPart() {
 // big rig. For testing only, ?cargo=ft20,ft40,ft20 puts those containers on the truck.
 const cargo: ShippingKind[] = (params.get('cargo') ?? '')
   .split(',')
-  .filter((k): k is ShippingKind => k === 'ft20' || k === 'ft40');
+  .filter((k): k is ShippingKind => k === 'ft10' || k === 'ft20' || k === 'ft40');
+const cargoColors: number[] = cargo.map(() => 0);
+syncTrailerCargo();
 let unloading = false;
 let cargoIndex = 0; // which container on the truck is next
 let buildRot: Rotation = 0;
@@ -788,17 +925,340 @@ const buildPoint = new THREE.Vector3();
 const screenCentre = new THREE.Vector2(0, 0);
 const cargoName = (kind: ShippingKind) => `${SHIPPING.kinds[kind].name} container`;
 
+const hammer = new THREE.Group();
+const hammerMaterial = new THREE.MeshStandardMaterial({ color: 0x9b744c, roughness: .9 });
+const hammerHandle = new THREE.Mesh(new THREE.BoxGeometry(.045, .38, .045), hammerMaterial);
+const hammerHead = new THREE.Mesh(new THREE.BoxGeometry(.2, .11, .11), hammerMaterial);
+hammerHead.position.y = .19;
+hammer.add(hammerHandle, hammerHead);
+hammer.position.set(.35, -.3, -.65);
+hammer.rotation.z = -.35;
+hammer.visible = false;
+camera.add(hammer);
+removalDialog = createRemovalDialog();
+
+woodMenu = createWoodBuildMenu({
+  available: id => [inventory, ...nearBuildStorage()].reduce((n, source) => n + countItem(source, id), 0),
+  canCraftTools: () => nearBench('basicbench') !== undefined,
+  packBench() {
+    const piece = nearBench('basicbench');
+    if (!piece) return say('Stand beside your toolbox bench first');
+    const result = pickupBasicBench(woodLayout, baseLayout, piece.id, inventory);
+    say(result.message);
+    if (result.ok) { applyBuildChange(); hud.setInventory(inventory); bedView.update(bed); }
+    woodMenu?.refresh(inventory);
+  },
+  craftTool(id) {
+    if (!nearBench('basicbench')) return say('Deploy a toolbox bench and stand beside it to craft tools');
+    say(craftWoodTool(inventory, id).message);
+    hud.setInventory(inventory);
+    woodMenu?.refresh(inventory);
+  },
+  plane() {
+    if (!nearPlanerBench()) return say('Stand beside your placed planer bench');
+    say(planeLog(inventory).message);
+    hud.setInventory(inventory);
+    woodMenu?.refresh(inventory);
+  },
+  canPlane: () => nearPlanerBench(),
+  cargo: () => ({
+    items: cargo.map((kind, index) => ({ index, name: cargoName(kind) })),
+    ready: canStartUnload(),
+    reason: !towingRig ? 'Collect containers with the tractor and flatbed first' : 'Stop and stand near the hooked flatbed to place containers',
+  }),
+  selectContainer(index) {
+    if (!canStartUnload()) return say('Stop and get closer to the hooked flatbed');
+    woodBuilding = false;
+    if (!unloading) buildKeys({ code: 'KeyU' } as KeyboardEvent);
+    cargoIndex = index;
+  },
+  select: beginWoodBuild,
+  craft() {
+    const result = craftBuildHammer(inventory);
+    say(result.message);
+    hud.setInventory(inventory);
+    woodMenu?.refresh(inventory);
+  },
+  stop() { woodBuilding = false; hammer.visible = false; },
+  closed() { keys.clear(); autoRun = false; hud.setInventory(inventory); },
+});
+
+function beginWoodBuild(kind: WoodKind) {
+  if (kind !== 'basicbench' && !countItem(inventory, 'build_hammer')) return say('Craft a build hammer first');
+  selectedWood = kind;
+  woodBuilding = true;
+  unloading = false;
+  autoRun = false;
+  keys.clear();
+  if (!baseLayout.pieces.size && !woodLayout.pieces.length) {
+    buildBaseY = ground.surface(walker.x, walker.z);
+    baseView.group.position.y = buildBaseY;
+    woodView.group.position.y = buildBaseY;
+  }
+  say(`${WOOD_PARTS[kind].name}: aim at flat ground, left-click place, R rotate; click the game first to capture the mouse`);
+}
+
+function activateHotbar(index: number) {
+  if (hud.isPaused() || hud.isStorageOpen() || hud.isTradeOpen() || woodMenu?.isOpen() || rigWorkshop?.isOpen() || mapOverlay.isOpen() || removalDialog?.isOpen()) return;
+  if (mode !== 'walking' || flying || bench.active) return say('Get out on foot to equip a hotbar item');
+  const slot = inventory.slots[index];
+  if (!slot) {
+    activeHotbar = null;
+    activeHotbarItem = null;
+    woodBuilding = false;
+    unloading = false;
+    hud.setActiveHotbar(null);
+    return say('That hotbar slot is empty. Open inventory (Tab), click Assign, then press 1-0');
+  }
+  const item = ITEMS[slot.id];
+  activeHotbar = index;
+  activeHotbarItem = slot.id;
+  hud.setActiveHotbar(index);
+  woodBuilding = false;
+  unloading = false;
+  if (item.placeable) beginWoodBuild(item.placeable);
+  else if (item.id === 'build_hammer') {
+    say('Build hammer equipped - right-click a placed wood piece to remove; K opens the build menu');
+  } else if (item.kind === 'food' || item.kind === 'drink') useInventorySlot(index);
+  else say(item.id === 'axe' ? 'Axe equipped - face a tree and press E to chop' :
+    item.kind === 'tool' ? `${item.name} equipped - E to use` : `${item.name}: building/crafting material (K menu)`);
+}
+
+function overlapFootprint(a: Box2, b: Box2): boolean {
+  return Math.abs(a.x - b.x) < a.hx + b.hx - .02 && Math.abs(a.z - b.z) < a.hz + b.hz - .02;
+}
+
+function woodSiteProblem(spec: WoodSpec): string | null {
+  const problem = checkWood(woodLayout, baseLayout, spec);
+  if (problem) return problem;
+  const b = woodBounds(spec);
+  if (spec.containerId === undefined) {
+    const obstacles = [...staticSolids, ...rigs.map(r => obbBounds(r.obb())), obbBounds(flatbed.obb()), truckObb(),
+      ...freightSources.flatMap(s => layoutBoxes(s.layout))];
+    if (obstacles.some(s => overlapFootprint(b, s))) return 'Something is in the way';
+    for (const [x, z] of [[b.x - b.hx, b.z - b.hz], [b.x + b.hx, b.z + b.hz], [b.x - b.hx, b.z + b.hz], [b.x + b.hx, b.z - b.hz]]) {
+      const terrain = ground.surface(x, z) - buildBaseY;
+      if (spec.level === 0 && Math.abs(terrain - (isBench(spec.kind) ? b.y0 : 0)) > .25) return 'Find flatter ground for building';
+      if (terrain > b.y0 + .25) return 'The terrain is in the way';
+      const water = waterLevel(worldMap, x, z);
+      if (water !== null && water > buildBaseY + b.y0) return 'Cannot build underwater';
+    }
+  }
+  if (spec.kind !== 'floor' && spec.kind !== 'deck' &&
+      Math.abs(walker.x - b.x) < b.hx + .4 && Math.abs(walker.z - b.z) < b.hz + .4 &&
+      (walkingHeight ?? ground.surface(walker.x, walker.z)) < buildBaseY + b.y0 + b.height)
+    return 'You are standing there';
+  if (Object.entries(woodMaterials(spec.kind)).some(([id, n]) =>
+    [inventory, ...nearBuildStorage()].reduce((count, source) => count + countItem(source, id), 0) < n))
+    return spec.kind === 'basicbench' ? 'Need a portable toolbox bench in your pack or nearby vehicle' :
+      spec.kind === 'workbench' ? 'Need 6 logs and a planer in your pack or nearby vehicle' : 'Not enough wood planks in your pack or nearby vehicle';
+  return null;
+}
+
+function updateWoodBuild() {
+  baseView.setGhost(null, false);
+  hammer.visible = selectedWood !== 'basicbench';
+  camera.updateMatrixWorld();
+  buildRay.setFromCamera(screenCentre, camera);
+  const hit = baseView.pick(buildRay);
+  woodSpec = null;
+  if (hit) woodSpec = aimWood(selectedWood, { x: hit.point.x, y: hit.point.y - buildBaseY, z: hit.point.z },
+    buildRot, hit.normal.y > .5 ? hit.piece.level + 1 : buildLevel,
+    { id: hit.piece.id, normalX: hit.normal.x, normalZ: hit.normal.z }, baseLayout);
+  else if (isBench(selectedWood) && buildLevel === 0) {
+    for (let distance = .5; distance <= BUILD_REACH; distance += .2) {
+      buildRay.ray.at(distance, buildPoint);
+      if (buildPoint.y > ground.surface(buildPoint.x, buildPoint.z)) continue;
+      woodSpec = aimWood(selectedWood, buildPoint, buildRot, 0);
+      break;
+    }
+  } else {
+    buildPlane.constant = -(buildBaseY + buildLevel * SHIPPING.height);
+    if (buildRay.ray.intersectPlane(buildPlane, buildPoint) && buildPoint.distanceTo(buildRay.ray.origin) <= BUILD_REACH)
+      woodSpec = aimWood(selectedWood, buildPoint, buildRot, buildLevel);
+  }
+  if (woodSpec && isBench(woodSpec.kind) && woodSpec.level === 0) {
+    const b = woodBounds(woodSpec);
+    woodSpec.y = ground.surface(b.x, b.z) - buildBaseY;
+  }
+  woodProblem = woodSpec ? woodSiteProblem(woodSpec) : 'Aim at the ground, a container wall or roof';
+  if (woodSpec?.kind === 'stairs' && woodSpec.flip === undefined) woodSpec.flip = woodTurn >= 2;
+  woodView.setGhost(woodSpec, woodProblem === null);
+  hud.setBuild({ title: 'Construction / Placement',
+    items: [{ name: WOOD_PARTS[selectedWood].name, selected: true }],
+    materials: selectedWood === 'basicbench' ? undefined : Object.entries(woodMaterials(selectedWood)).map(([id, n]) => `${n} ${ITEMS[id].name}`).join(' · '),
+    hideLevel: isBench(selectedWood),
+    level: buildLevel, status: woodProblem ?? 'Ready to place',
+    ok: woodProblem === null });
+}
+
+function placeWoodBuild() {
+  if (!woodSpec) return say('Aim at a building socket first');
+  const problem = woodSiteProblem(woodSpec);
+  if (problem) return say(problem);
+  const result = placeWood(woodLayout, baseLayout, woodSpec, inventory, nearBuildStorage());
+  say(result.message);
+  if (result.ok) { applyBuildChange(); hud.setInventory(inventory); bedView.update(bed); }
+}
+
+function dismantleWoodBuild() {
+  camera.updateMatrixWorld();
+  buildRay.setFromCamera(screenCentre, camera);
+  const hit = woodView.pick(buildRay);
+  if (!hit) return say('Aim at a wood piece to dismantle');
+  if (hit.point.distanceTo(camera.position) > 3) return say('Get closer to remove this piece');
+  const piece = woodLayout.pieces.find(p => p.id === hit.id);
+  if (!piece) return say('That piece is no longer available');
+  keys.clear();
+  autoRun = false;
+  document.exitPointerLock();
+  removalDialog?.open(WOOD_PARTS[piece.kind].name,
+    piece.kind === 'basicbench' ? 'The toolbox bench will return to your inventory so you can place it elsewhere.' :
+      'This permanently dismantles the piece. Building materials are not refunded.',
+    () => {
+      if (mode !== 'walking' || flying || hit.point.distanceTo(camera.position) > 3)
+        return say('Stand near the piece on foot to remove it');
+      const current = woodLayout.pieces.find(p => p.id === hit.id);
+      if (!current) return say('That piece is no longer available');
+      if (current.kind === 'basicbench') {
+        const result = pickupBasicBench(woodLayout, baseLayout, hit.id, inventory);
+        say(result.message);
+        if (result.ok) { applyBuildChange(); hud.setInventory(inventory); }
+      } else {
+        if (!countItem(inventory, 'build_hammer')) return say('Carry a build hammer to remove this piece');
+        const problem = removeWood(woodLayout, baseLayout, hit.id);
+        if (problem) return say(problem);
+        applyBuildChange();
+        say('Dismantled wood piece (no material refund)');
+      }
+    });
+}
+
+function isHammerEquipped() {
+  return activeHotbar !== null && inventory.slots[activeHotbar]?.id === 'build_hammer';
+}
+
+function toggleWoodDoor(): boolean {
+  camera.updateMatrixWorld();
+  buildRay.setFromCamera(screenCentre, camera);
+  const hit = woodView.pick(buildRay);
+  if (!hit || hit.point.distanceTo(camera.position) > 3) return false;
+  const piece = woodLayout.pieces.find(p => p.id === hit.id);
+  if (!piece || !isOpening(piece.kind)) return false;
+  const b = woodBounds(piece);
+  if (piece.open && Math.abs(walker.x - b.x) < b.hx + .4 && Math.abs(walker.z - b.z) < b.hz + .4) {
+    say('Step clear before closing');
+    return true;
+  }
+
+  piece.open = !piece.open;
+  applyBuildChange();
+  say(`${WOOD_PARTS[piece.kind].name} ${piece.open ? 'opened' : 'closed'}`);
+  return true;
+}
+
+  function nearBench(kind: 'basicbench' | 'workbench') {
+    if (mode !== 'walking' || flying) return undefined;
+    return woodLayout.pieces.find(p => {
+      if (p.kind !== kind) return false;
+      const b = woodBounds(p);
+      return Math.hypot(walker.x - b.x, walker.z - b.z) < 3 &&
+        Math.abs((walkingHeight ?? ground.surface(walker.x, walker.z)) - (buildBaseY + b.y0)) < 1;
+    });
+  }
+
+  function nearPlanerBench(): boolean { return nearBench('workbench') !== undefined; }
+
+  function nearBuildStorage() {
+    return [
+      ...(Math.hypot(walker.x - car.body.position.x, walker.z - car.body.position.z) < 8 ? [bed] : []),
+      ...rigs.flatMap(r => r.complete() && r.storage && Math.hypot(walker.x - r.model.position.x, walker.z - r.model.position.z) < 8 ? [r.storage] : []),
+    ];
+  }
+
+  function targetedHarvestTree() {
+    return harvestTrees.filter(t => {
+      const dx = t.x - walker.x, dz = t.z - walker.z, distance = Math.hypot(dx, dz);
+      return !t.cut && distance < 3 && Math.abs(ground.surface(t.x, t.z) - (walkingHeight ?? ground.surface(walker.x, walker.z))) < 2 &&
+        (dx * Math.sin(walker.yaw) + dz * Math.cos(walker.yaw)) / Math.max(distance, .01) > .65;
+    }).sort((a, b) => Math.hypot(a.x - walker.x, a.z - walker.z) - Math.hypot(b.x - walker.x, b.z - walker.z))[0];
+  }
+
+  function harvestTree(): boolean {
+    if (currentTarget || carrying || mode !== 'walking' || flying) return false;
+    const tree = targetedHarvestTree();
+    if (!tree) return false;
+    const result = chopTree(tree, inventory);
+    say(result.message);
+    if (result.felled) {
+      if (tree.prop) {
+        tree.prop.cut = true;
+        for (const mesh of propViews) {
+          if (!(mesh instanceof THREE.InstancedMesh)) continue;
+          const list = mesh.userData.props as Prop[] | undefined;
+          const index = list?.indexOf(tree.prop) ?? -1;
+          if (index >= 0) { mesh.setMatrixAt(index, new THREE.Matrix4().makeScale(0, 0, 0)); mesh.instanceMatrix.needsUpdate = true; }
+        }
+      } else if (tree.townIndex !== undefined) townViews[tree.townIndex].removeTree(tree.x, tree.z);
+      worldSpec.boxes = worldSpec.boxes.filter(b => !(b.x === tree.x && b.z === tree.z && 'tree' in b && b.tree));
+      for (const town of settlements) town.solids = town.solids.filter(b => !(b.tree && b.x === tree.x && b.z === tree.z));
+      for (let i = staticSolids.length - 1; i >= 0; i--)
+        if (staticSolids[i].x === tree.x && staticSolids[i].z === tree.z && staticSolids[i].hx < .5 && staticSolids[i].hz < .5) staticSolids.splice(i, 1);
+      sim.removeTree?.(tree.x, tree.z);
+      for (const vehicle of rigs) vehicle.physics.removeTree?.(tree.x, tree.z);
+      rebuildBuildSolids();
+      hud.setInventory(inventory);
+    }
+    return true;
+  }
 function truckDistance(): number {
-  return Math.hypot(walker.x - car.body.position.x, walker.z - car.body.position.z);
+  return Math.hypot(walker.x - flatbed.model.position.x, walker.z - flatbed.model.position.z);
 }
 
 function canStartUnload(): boolean {
-  if (bench.active || cargo.length === 0) return false;
-  if (mode === 'driving') return seat === 'driver' && Math.abs(sim.speed()) <= 3;
-  return truckDistance() <= UNLOAD_NEAR;
+  if (bench.active || !towingRig) return false;
+  if (mode === 'driving') return rigDriving && rig === towingRig && Math.abs(rig.physics.speed()) < .7;
+  return truckDistance() <= UNLOAD_NEAR && Math.abs(towingRig.physics.speed()) < .7;
+}
+
+function hitchTrailer() {
+  if (!rigDriving) return say('Drive a restored big rig to hook up the flatbed');
+  if (rig.kind !== 'tractor') return say('The box truck carries item storage; use the tractor to tow the flatbed');
+  if (Math.abs(rig.physics.speed()) >= .7) return say('Stop before changing the trailer hitch');
+  if (towingRig) {
+    if (towingRig !== rig) return say('The flatbed is attached to another rig');
+    const pose = rig.physics.trailerPose?.();
+    if (pose) flatbed.update(pose);
+    rig.physics.detachTrailer?.();
+    towingRig = null;
+    flatbed.setAttached(false);
+    flatbed.park(ground.surface);
+    return say('Flatbed unhooked. Cargo stays on the trailer');
+  }
+  const hitch = new THREE.Vector3(0, TRAILER.rigHitchY, TRAILER.rigHitchZ)
+    .applyQuaternion(rig.model.quaternion).add(new THREE.Vector3(...rig.pose().position));
+  const angle = Math.atan2(Math.sin(rig.obb().yaw - flatbed.obb().yaw), Math.cos(rig.obb().yaw - flatbed.obb().yaw));
+  if (hitch.distanceTo(flatbed.hitch()) > 1.8 || Math.abs(angle) > .5)
+    return say('Back the rig under the flatbed kingpin, aligned and within 1.8 m');
+  rig.physics.removeVehicleObstacle?.(100);
+  rig.physics.attachTrailer!(flatbed.pose());
+  towingRig = rig;
+  flatbed.setAttached(true);
+  syncTrailerCargo();
+  say('Flatbed hooked up. Tow to the docks; U loads or unloads containers');
+}
+
+function syncTrailerCargo() {
+  flatbed.syncCargo(cargo, cargoColors);
+  towingRig?.physics.setTrailerCargo?.(cargo.map(containerLength));
 }
 
 function getOutOfTruck() {
+  if (rigDriving) {
+    const out = exitPosition(rig.obb());
+    Object.assign(walker, {x:out.x,z:out.z,yaw:out.yaw,pitch:0});
+    rigDriving=false; mode='walking'; keys.clear(); camReady=false; return;
+  }
   swingDoor(seat === 'passenger' ? -1 : 1);
   const out = exitPosition(truckObb(), seat === 'passenger' ? -1 : 1);
   Object.assign(walker, { x: out.x, z: out.z, yaw: out.yaw, pitch: 0 });
@@ -806,14 +1266,20 @@ function getOutOfTruck() {
 }
 
 function applyBuildChange() {
-  baseView.sync(baseLayout);
+  baseView.sync(baseLayout, modifiedContainers());
+  woodView.group.position.y = buildBaseY;
+  woodView.sync(woodLayout, baseLayout);
   rebuildBuildSolids();
   worldSpec.buildBoxes = baseBoxes();
   sim.setBuildBoxes?.(worldSpec.buildBoxes);
+  for (const vehicle of rigs) vehicle.physics.setBuildBoxes?.(worldSpec.buildBoxes);
   try {
     localStorage.setItem(GAME_BASE_STORAGE_KEY, serializeLayout(baseLayout));
-  } catch {
-    /* storage may be blocked; the base just will not be remembered */
+    localStorage.setItem(`${GAME_BASE_STORAGE_KEY}.height`, String(buildBaseY));
+    localStorage.setItem(WOOD_SAVE_KEY, JSON.stringify(woodLayout.pieces));
+  } catch (error) {
+    console.error('Could not save buildings', error);
+    say('Buildings changed, but saving failed. They may be lost on reload');
   }
 }
 
@@ -827,28 +1293,44 @@ function buildKeys(e: KeyboardEvent) {
     if (unloading) {
       unloading = false;
       say('Finished unloading');
-    } else if (!bench.active && cargo.length === 0) {
-      say('There is nothing on the truck to unload');
     } else if (!canStartUnload()) {
-      if (!bench.active) say(mode === 'driving' ? 'Slow down to unload' : 'Get closer to the truck to unload');
+      if (!bench.active) say(!towingRig ? 'Hook the big rig to the flatbed first' : 'Stop and get closer to the flatbed');
     } else {
       if (mode === 'driving') getOutOfTruck();
+      if (!baseLayout.pieces.size && !woodLayout.pieces.length) {
+        buildBaseY = ground.height(walker.x, walker.z);
+        baseView.group.position.y = buildBaseY;
+      }
       unloading = true;
+      woodBuilding = false;
       cargoIndex = 0;
-      say('Unloading: click to put the container down');
+      autoRun = false;
+      keys.clear();
+      say('Flatbed: right-click a nearby container to load; left-click to place cargo. U finishes');
     }
     return;
   }
   if (!unloading) return;
-  const digit = /^Digit([1-9])$/.exec(e.code);
-  if (digit && Number(digit[1]) <= cargo.length) cargoIndex = Number(digit[1]) - 1;
   if (e.code === 'PageUp') changeBuildLevel(1);
   if (e.code === 'PageDown') changeBuildLevel(-1);
 }
 
 function updateBuild() {
+  if (activeHotbar !== null && inventory.slots[activeHotbar]?.id !== activeHotbarItem) {
+    activeHotbar = null;
+    activeHotbarItem = null;
+    woodBuilding = false;
+    hud.setActiveHotbar(null);
+  }
+  if (woodBuilding && (mode !== 'walking' || flying || bench.active || selectedWood !== 'basicbench' && !countItem(inventory, 'build_hammer'))) woodBuilding = false;
+  if (woodBuilding) {
+    updateWoodBuild();
+    return;
+  }
+  hammer.visible = isHammerEquipped() && mode === 'walking' && !flying && !bench.active;
+  woodView.setGhost(null, false);
   if (unloading && mode !== 'walking') unloading = false; // got into the truck, or the performance run started
-  if (unloading && truckDistance() > UNLOAD_FAR) {
+  if (unloading && (!towingRig || truckDistance() > UNLOAD_FAR)) {
     unloading = false;
     say('Too far from the truck');
   }
@@ -861,16 +1343,24 @@ function updateBuild() {
   }
   camera.updateMatrixWorld();
   buildRay.setFromCamera(screenCentre, camera);
+  if (!cargo.length) {
+    buildSpec = null; buildPlan = null;
+    baseView.setGhost(null, false);
+    hud.setBuild({ title: 'Trailer / Cargo', items: [], level: buildLevel,
+      status: 'Empty. Collect a 10 ft or 20 ft container near the trailer.', ok: true,
+      controls: [{ key: 'RMB', label: 'Collect' }, { key: 'U', label: 'Finish' }] });
+    return;
+  }
   cargoIndex = Math.min(cargoIndex, cargo.length - 1);
   const kind = cargo[cargoIndex];
   const hit = baseView.pick(buildRay);
   buildSpec = null;
   if (hit) {
-    buildSpec = aimToSpec(kind, buildRot, 0, { x: hit.point.x, y: hit.point.y - buildBaseY, z: hit.point.z }, hit.normal, hit.piece, buildLevel);
+    buildSpec = aimToSpec(kind, buildRot, cargoColors[cargoIndex] ?? 0, { x: hit.point.x, y: hit.point.y - buildBaseY, z: hit.point.z }, hit.normal, hit.piece, buildLevel);
   } else {
     buildPlane.constant = -(buildBaseY + buildLevel * SHIPPING.height); // the plane at the height of that level
     if (buildRay.ray.intersectPlane(buildPlane, buildPoint) && buildPoint.distanceTo(buildRay.ray.origin) <= BUILD_REACH) {
-      buildSpec = aimToSpec(kind, buildRot, 0, buildPoint, null, null, buildLevel);
+      buildSpec = aimToSpec(kind, buildRot, cargoColors[cargoIndex] ?? 0, buildPoint, null, null, buildLevel);
     }
   }
   buildPlan = buildSpec ? planPlace(baseLayout, buildSpec) : null;
@@ -878,7 +1368,9 @@ function updateBuild() {
   if (buildSpec && buildPlan?.ok) {
     buildProblem = siteProblem([buildSpec, ...buildPlan.pillars], {
       groundHeight: (x, z) => ground.height(x, z) - buildBaseY, // the base is measured from the town's level ground
-      solids: staticSolids,
+      solids: [...staticSolids, ...freightSources.flatMap(s => layoutBoxes(s.layout)),
+        ...woodLayout.pieces.map(woodBounds),
+        ...rigs.map(r => obbBounds(r.obb())), obbBounds(flatbed.obb())],
       player: { x: walker.x, z: walker.z },
       truck: { x: car.body.position.x, z: car.body.position.z },
     });
@@ -891,7 +1383,7 @@ function updateBuild() {
     status = buildProblem ?? (buildPlan.ok ? `Click to put it down: level ${buildSpec.level}${pillars}` : (buildPlan.reason ?? ''));
   }
   hud.setBuild({
-    title: `On the truck: ${cargo.length}`,
+    title: `Trailer / ${cargo.length} loaded`,
     items: cargo.map((k, i) => ({ name: cargoName(k), selected: i === cargoIndex })),
     level: buildLevel,
     status,
@@ -903,13 +1395,15 @@ function buildPlace() {
   if (!buildSpec || !buildPlan) return;
   if (!buildPlan.ok) return say(buildPlan.reason ?? 'Cannot put it down here');
   if (buildProblem) return say(buildProblem);
-  addPiece(baseLayout, buildSpec, true);
+  if (!addPiece(baseLayout, buildSpec, true)) return say('The placement changed; aim again');
   cargo.splice(cargoIndex, 1);
+  cargoColors.splice(cargoIndex, 1);
+  syncTrailerCargo();
   cargoIndex = Math.max(0, Math.min(cargoIndex, cargo.length - 1));
   applyBuildChange();
   if (cargo.length === 0) {
     unloading = false;
-    say('The truck is unloaded');
+    say('The flatbed is unloaded');
   } else {
     say(`Put down. ${cargo.length} left on the truck`);
   }
@@ -918,22 +1412,55 @@ function buildPlace() {
 function buildRemove() {
   camera.updateMatrixWorld();
   buildRay.setFromCamera(screenCentre, camera);
-  const hit = baseView.pick(buildRay);
+  const candidates = [
+    { hit: baseView.pick(buildRay), layout: baseLayout, y: buildBaseY },
+    ...freightSources.map(source => ({ hit: source.view.pick(buildRay), layout: source.layout, y: source.y })),
+  ].filter(candidate => candidate.hit !== null)
+    .sort((a, b) => a.hit!.point.distanceTo(camera.position) - b.hit!.point.distanceTo(camera.position));
+  const candidate = candidates[0];
+  const hit = candidate?.hit;
   if (!hit) return;
-  const check = checkRemove(baseLayout, hit.piece.id);
-  if (!check.ok) return say(check.reason ?? 'Cannot pick that up');
+  if (!towingRig || Math.abs(towingRig.physics.speed()) >= .7) return say('Hook up the flatbed and stop before loading');
+  const box = pieceBox(hit.piece);
+  if (Math.hypot(box.x - flatbed.model.position.x, box.z - flatbed.model.position.z) > 12)
+    return say('Move the flatbed within 12 m of the container');
   const kind = hit.piece.kind;
-  removePiece(baseLayout, hit.piece.id);
+  if (candidate.layout === baseLayout && woodLayout.pieces.some(p => p.containerId === hit.piece.id ||
+      overlapFootprint(woodBounds(p), pieceBox(hit.piece)) && p.level > hit.piece.level))
+    return say('Dismantle attached or supported wood pieces before collecting this container');
   if (kind !== 'pillar') {
-    cargo.push(kind);
-    say(`Picked the ${cargoName(kind)} back up onto the truck`);
+    const result = loadTrailerContainer(candidate.layout, hit.piece.id, cargo, cargoColors);
+    if (!result.ok) return say(result.message);
+    syncTrailerCargo();
+    say(result.message);
+  } else {
+    const check = checkRemove(candidate.layout, hit.piece.id);
+    if (!check.ok) return say(check.reason ?? 'Cannot pick that up');
+    removePiece(candidate.layout, hit.piece.id);
   }
+  for (const source of freightSources) source.view.sync(source.layout);
   applyBuildChange();
 }
 
+function obbBounds(box: Obb2): Box2 {
+  const c = Math.abs(Math.cos(box.yaw)), s = Math.abs(Math.sin(box.yaw));
+  return { x: box.x, z: box.z, hx: c * box.hx + s * box.hz, hz: s * box.hx + c * box.hz };
+}
+
 renderer.domElement.addEventListener('mousedown', (e) => {
-  if (!unloading || mode !== 'walking' || bench.active) return;
+  if (removalDialog?.isOpen() || hud.isInventoryOpen() || hud.isStorageOpen() || hud.isTradeOpen() ||
+    woodMenu?.isOpen() || rigWorkshop?.isOpen() || mapOverlay.isOpen()) return;
+  if ((!unloading && !woodBuilding && !isHammerEquipped()) || mode !== 'walking' || flying || bench.active) return;
   if (hud.isPaused() || document.pointerLockElement !== renderer.domElement) return; // the first click only captures the mouse
+  if (e.button === 2 && !unloading && (woodBuilding || isHammerEquipped())) {
+    dismantleWoodBuild();
+    return;
+  }
+  if (woodBuilding) {
+    if (e.button === 0) placeWoodBuild();
+    return;
+  }
+  if (!unloading) return;
   if (e.button === 0) buildPlace();
   if (e.button === 2) buildRemove();
 });
@@ -941,7 +1468,7 @@ renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 renderer.domElement.addEventListener(
   'wheel',
   (e) => {
-    if (!unloading || hud.isPaused()) return;
+    if ((!unloading && !woodBuilding) || hud.isPaused()) return;
     e.preventDefault();
     changeBuildLevel(e.deltaY < 0 ? 1 : -1);
   },
@@ -949,7 +1476,9 @@ renderer.domElement.addEventListener(
 );
 // For tests and screenshots.
 (window as unknown as { __game: unknown }).__game = {
-  baseLayout,
+  baseLayout, activateHotbar,
+  woodLayout, woodMenu, woodView, placeWoodBuild, toggleWoodDoor,
+  woodBuilding: () => woodBuilding,
   cargo,
   walker,
   unload: () => buildKeys({ code: 'KeyU' } as KeyboardEvent),
@@ -987,6 +1516,8 @@ renderer.domElement.addEventListener(
   yardCargo: () => town.junkyard.cargo,
   carModel: car,
   carBuild,
+  rigs, rigSources, rigWorkshops, rigDriving: () => rigDriving,
+  flatbed, freightSources, hitchTrailer, towingRig: () => rigs.indexOf(towingRig!), syncTrailerCargo,
   interact: () => interact(),
   target: () => currentTarget,
   carrying: () => carrying,
@@ -996,15 +1527,27 @@ renderer.domElement.addEventListener(
   mode: () => mode,
 };
 
-/** For testing: J puts you on foot on the street outside the junkyard gate, facing the yard. */
-function jumpToTown() {
+const yardStops = salvageYardStops(settlements);
+let yardStopIndex = -1;
+/** For testing: J cycles through the salvage yards, beginning with the starter yard. */
+function jumpToSalvageYard() {
   if (bench.active) return;
+  if (!yardStops.length) return say('No salvage yards available');
+  yardStopIndex = (yardStopIndex + 1) % yardStops.length;
+  rigDriving = false;
   flying = false;
   unloading = false;
+  woodBuilding = false;
+  walkingHeight = null;
+  autoRun = false;
+  keys.clear();
+  closeBed();
+  mapOverlay.close();
+  currentTarget = null;
   mode = 'walking';
   camReady = false;
-  Object.assign(walker, { x: town.junkyard.gateX, z: town.playerSpawn.z, yaw: Math.PI, pitch: 0 });
-  say('Jumped to the town (testing)');
+  Object.assign(walker, yardStops[yardStopIndex], { pitch: 0 });
+  say(`Salvage yard ${yardStopIndex + 1}/${yardStops.length}${yardStopIndex === 0 ? ' - starting yard' : ''} (J: next yard)`);
 }
 
 const bench = new Bench(
@@ -1029,6 +1572,15 @@ function setPaused(paused: boolean) {
 hud.setResumeHandler(() => setPaused(false));
 window.addEventListener('blur', () => setPaused(true));
 window.addEventListener('keydown', (e) => {
+  if (removalDialog?.isOpen()) {
+    if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); removalDialog.close(); }
+    return;
+  }
+  if (woodMenu?.isOpen()) return;
+  if (rigWorkshop?.isOpen()) {
+    if (e.code === 'Escape' && !e.repeat) rigWorkshop.close();
+    return;
+  }
   if (hud.isPaused()) {
     if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); setPaused(false); }
     return;
@@ -1047,23 +1599,58 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Escape' || e.code === 'KeyE' || e.code === 'KeyI') hud.closeTrade();
     return;
   }
+  const hotbarSlot = hotbarIndex(e.code);
+  if (hotbarSlot !== null && !e.repeat && !hud.isStorageOpen() && !mapOverlay.isOpen()) {
+    e.preventDefault();
+    if (hud.isInventoryOpen()) {
+      if (!hud.assignHotbar(hotbarSlot)) say('Click Assign on an inventory item first, then press 1-0');
+    } else activateHotbar(hotbarSlot);
+    return;
+  }
+  if (e.code === 'KeyK' && !e.repeat) {
+    if (mode !== 'walking' || flying || bench.active) return say('Get out on foot to craft or build');
+    closeBed();
+    mapOverlay.close();
+    if (hud.isInventoryOpen()) hud.toggleInventory();
+    unloading = false;
+    keys.clear();
+    autoRun = false;
+    document.exitPointerLock();
+    woodMenu?.open(inventory);
+    return;
+  }
   if (e.code === 'Tab') e.preventDefault(); // Tab would otherwise move the page focus
   if (e.repeat) return;
   if (e.code === 'Tab' || e.code === 'KeyI') {
-    if (mode === 'driving' && !bench.active && !flying) toggleCarStorage();
+    if (hud.isStorageOpen()) closeBed();
+    else if (mode === 'driving' && rigDriving && rig.storage && !bench.active && !flying) {
+      openBoxStorage(rig);
+    } else if (mode === 'driving' && !rigDriving && !bench.active && !flying) toggleCarStorage();
     else {
       hud.toggleInventory();
-      if (hud.isInventoryOpen()) document.exitPointerLock(); // the mouse is needed to click food and drink
+      if (hud.isInventoryOpen()) {
+        keys.clear(); autoRun = false;
+        document.exitPointerLock(); // the mouse is needed to click food and drink
+      }
     }
   }
+  if (hud.isInventoryOpen()) return;
+  if (hud.isStorageOpen()) { if (e.code === 'KeyE') closeBed(); return; }
   if (e.code === 'KeyC') switchSeat();
+  if (e.code === 'KeyH') hitchTrailer();
   if (e.code === 'KeyV' && mode === 'driving' && !flying && sim.flipUpright) {
-    sim.flipUpright();
-    say('Flipped the truck back onto its wheels');
+    if (rigDriving && towingRig === rig) say('Unhook the flatbed before flipping the rig');
+    else {
+      (rigDriving ? rig.physics : sim).flipUpright?.();
+      say('Flipped the truck back onto its wheels');
+    }
   }
   buildKeys(e);
   if (e.code === 'KeyR') {
-    if (unloading) buildRot = buildRot === 0 ? 1 : 0;
+    if (woodBuilding) {
+      woodTurn = (woodTurn + 1) % 4;
+      buildRot = woodTurn % 2 === 0 ? 0 : 1;
+    } else if (unloading) buildRot = buildRot === 0 ? 1 : 0;
     else void reset('town');
   }
   if (e.code === 'Escape') {
@@ -1079,9 +1666,20 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'BracketRight') location.search = `?seed=${SEED + 1}`;
   if (e.code === 'BracketLeft') location.search = `?seed=${SEED - 1}`;
   if (e.code === 'KeyG') toggleFly();
-  if (e.code === 'KeyJ') jumpToTown();
+  if (e.code === 'KeyJ') jumpToSalvageYard();
   if (e.code === 'KeyT' && flying) toggleFly(true);
-  if (e.code === 'KeyE' && !flying) interact();
+  if (woodBuilding && (e.code === 'PageUp' || e.code === 'PageDown')) changeBuildLevel(e.code === 'PageUp' ? 1 : -1);
+  if (e.code === 'KeyE' && !flying) {
+    if (mode === 'walking' && toggleWoodDoor()) return;
+    if (!currentTarget && (nearPlanerBench() || nearBench('basicbench'))) {
+      keys.clear();
+      autoRun = false;
+      document.exitPointerLock();
+      woodMenu?.open(inventory);
+      return;
+    }
+    if (!harvestTree()) interact();
+  }
   if (!flying && (e.code === 'KeyF' || e.code === 'KeyQ')) {
     const kind = e.code === 'KeyF' ? 'food' : 'drink';
     const r = consume(survival, inventory, kind);
@@ -1118,7 +1716,8 @@ let fpsClock = last;
 let liveText = '';
 
 renderer.setAnimationLoop((now) => {
-  if (hud.isPaused()) { last = now; return; }
+  if (hud.isPaused() || rigWorkshop?.isOpen() || woodMenu?.isOpen() || removalDialog?.isOpen()) { last = now; return; }
+  const vehicleBody = rigDriving ? rig.model : car.body;
   const frameStart = performance.now();
   const frameMs = now - last;
   const dt = Math.min(frameMs / 1000, 0.1);
@@ -1132,10 +1731,23 @@ renderer.setAnimationLoop((now) => {
     mode = 'driving';
     seat = 'driver';
   }
-  const input: DriveInput = bench.active ? scriptedInput(sim.speed()) : mode === 'driving' && seat === 'driver' && !flying ? readInput() : PARKED;
+  const input: DriveInput = bench.active ? scriptedInput(sim.speed()) : mode === 'driving' && !rigDriving && seat === 'driver' && !flying && !hud.isStorageOpen() ? readInput() : PARKED;
   const physicsStart = performance.now();
   while (accumulator >= STEP) {
+    const trailerObstacle = flatbed.obstacle(cargo.length > 0);
+    rigs.forEach((vehicle, id) => {
+      sim.setVehicleObstacle?.(vehicle.pose(), vehicle.half, id);
+      vehicle.physics.setVehicleObstacle?.(sim.chassis(), CAR.halfExtents, rigs.length);
+      rigs.forEach((other, otherId) => {
+        if (other !== vehicle) vehicle.physics.setVehicleObstacle?.(other.pose(), other.half, otherId);
+      });
+      if (vehicle !== towingRig) vehicle.physics.setVehicleObstacle?.(trailerObstacle.pose, trailerObstacle.half, 100);
+    });
+    sim.setVehicleObstacle?.(trailerObstacle.pose, trailerObstacle.half, 100);
     sim.step(STEP, input);
+    for (const vehicle of rigs) vehicle.step(STEP, vehicle === rig && rigDriving && !flying && !hud.isStorageOpen() ? readInput() : PARKED);
+    const trailerPose = towingRig?.physics.trailerPose?.();
+    if (trailerPose) flatbed.update(trailerPose);
     prev = curr;
     curr = takeSnapshot();
     accumulator -= STEP;
@@ -1147,9 +1759,9 @@ renderer.setAnimationLoop((now) => {
   const alpha = accumulator / STEP;
   car.body.position.lerpVectors(prev.chassisPos, curr.chassisPos, alpha);
   car.body.quaternion.slerpQuaternions(prev.chassisQuat, curr.chassisQuat, alpha);
-  const sunX = flying ? fly.x : mode === 'walking' ? walker.x : car.body.position.x;
-  const sunY = flying ? ground.height(fly.x, fly.z) : mode === 'walking' ? ground.height(walker.x, walker.z) : car.body.position.y;
-  const sunZ = flying ? fly.z : mode === 'walking' ? walker.z : car.body.position.z;
+  const sunX = flying ? fly.x : mode === 'walking' ? walker.x : vehicleBody.position.x;
+  const sunY = flying ? ground.height(fly.x, fly.z) : mode === 'walking' ? ground.height(walker.x, walker.z) : vehicleBody.position.y;
+  const sunZ = flying ? fly.z : mode === 'walking' ? walker.z : vehicleBody.position.z;
   sun.target.position.set(sunX, sunY, sunZ);
   sun.position.set(sunX + 20, sunY + 32, sunZ + 14);
   car.wheels.forEach((wheel, i) => {
@@ -1187,7 +1799,14 @@ renderer.setAnimationLoop((now) => {
     // First person: walk, then look through the player's eyes.
     const stepFromX = walker.x;
     const stepFromZ = walker.z;
-    stepWalker(walker, { ...readWalkInput(), speedScale: isWeak(survival) ? SURVIVAL.weakSpeedScale : 1 }, dt, walkSolids, [truckObb()]);
+    const terrainY = ground.surface(walker.x, walker.z);
+    walkingHeight = buildBaseY + woodSurface(woodLayout, baseLayout, walker.x, walker.z,
+      (walkingHeight ?? terrainY) - buildBaseY, terrainY - buildBaseY);
+    const buildingSolids = [...containerShells(baseLayout, woodLayout), ...woodBoxes(woodLayout)]
+      .filter(b => b.y0 + buildBaseY < walkingHeight! + WALKER.eyeHeight &&
+        b.y0 + b.height + buildBaseY > walkingHeight! + .35);
+    stepWalker(walker, { ...readWalkInput(), speedScale: isWeak(survival) ? SURVIVAL.weakSpeedScale : 1 }, dt,
+      [...walkSolids, ...buildingSolids], [truckObb(), flatbed.obb(), ...rigs.map(vehicle => vehicle.obb())]);
     const level = waterLevel(worldMap, walker.x, walker.z);
     if (level !== null && level - ground.surface(walker.x, walker.z) > 1.1) {
       walker.x = stepFromX; // too deep to wade: the water stops you (on a bridge deck you stay dry)
@@ -1196,11 +1815,14 @@ renderer.setAnimationLoop((now) => {
     currentTarget = findTarget(walker, {
       containers: settlements.flatMap(s => reachableContainers(s, walker.x, walker.z)),
       truck: truckObb(),
+      rigs: rigs.map((vehicle, id) => ({ ...vehicle.obb(), id })),
       parts: looseParts.filter(onTop).map((p) => ({ id: p.id, x: p.x, z: p.z, hx: PART_REACH_BOX, hz: PART_REACH_BOX })),
       pickups: pickups.map((p) => ({ id: p.id, x: p.x, z: p.z, hx: 0.55, hz: 0.55 })),
       traders: town.junkyard.trader && insideWorkshop(town.junkyard, walker.x, walker.z) ? [{ ...town.junkyard.trader.counter, id: 0 }] : [],
     });
-    const groundY = ground.surface(walker.x, walker.z);
+    const groundY = buildBaseY + woodSurface(woodLayout, baseLayout, walker.x, walker.z,
+      walkingHeight - buildBaseY, ground.surface(walker.x, walker.z) - buildBaseY);
+    walkingHeight = groundY;
     camera.position.set(walker.x, groundY + WALKER.eyeHeight, walker.z);
     camera.rotation.set(walker.pitch, walker.yaw + Math.PI, 0, 'YXZ'); // the camera looks down -Z, so turn it half way round
   } else {
@@ -1213,24 +1835,24 @@ renderer.setAnimationLoop((now) => {
       lookYaw -= lookYaw * k;
       lookPitch += (DEFAULT_PITCH - lookPitch) * k;
     }
-    back.set(0, 0, 1).applyQuaternion(car.body.quaternion);
+    back.set(0, 0, 1).applyQuaternion(vehicleBody.quaternion);
     const carHeading = Math.atan2(back.x, back.z);
     if (!camReady) {
       camHeading = carHeading;
-      camY = car.body.position.y;
+      camY = vehicleBody.position.y;
       camReady = true;
     }
     let diff = carHeading - camHeading;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // shortest way round
     camHeading += diff * (1 - Math.exp(-CAM_HEADING_RATE * dt));
-    camY += (car.body.position.y - camY) * (1 - Math.exp(-CAM_HEIGHT_RATE * dt));
+    camY += (vehicleBody.position.y - camY) * (1 - Math.exp(-CAM_HEIGHT_RATE * dt));
 
     back.set(-Math.sin(camHeading), 0, -Math.cos(camHeading)).applyAxisAngle(UP, lookYaw);
-    camTarget.set(car.body.position.x, camY + 1, car.body.position.z);
+    camTarget.set(vehicleBody.position.x, camY + (rigDriving ? 2 : 1), vehicleBody.position.z);
     camPos
       .copy(camTarget)
-      .addScaledVector(back, Math.cos(lookPitch) * CAM_DISTANCE)
-      .setY(camTarget.y + Math.sin(lookPitch) * CAM_DISTANCE);
+      .addScaledVector(back, Math.cos(lookPitch) * (rigDriving ? 14 : CAM_DISTANCE))
+      .setY(camTarget.y + Math.sin(lookPitch) * (rigDriving ? 14 : CAM_DISTANCE));
     camera.position.copy(camPos);
     camera.lookAt(camTarget);
   }
@@ -1239,6 +1861,7 @@ renderer.setAnimationLoop((now) => {
   baseView.group.visible = !bench.active;
   cargoView.group.visible = !bench.active;
   cargoView.update(camera);
+  for (const source of freightSources) source.view.update(camera);
   updateBuild();
   baseView.update(camera);
   renderer.render(scene, camera);
@@ -1258,20 +1881,21 @@ renderer.setAnimationLoop((now) => {
     const s = summarizeFrames(recent);
     liveText = `${s.avgFps.toFixed(0)} fps   1% low ${s.onePercentLowFps.toFixed(0)}   cpu ${cpuMs.toFixed(1)} ms   draws ${renderer.info.render.calls}`;
     // The map follows where you are. yaw here is the map convention: 0 faces +Z, down the map.
-    const mapX = flying ? fly.x : mode === 'walking' ? walker.x : car.body.position.x;
-    const mapZ = flying ? fly.z : mode === 'walking' ? walker.z : car.body.position.z;
+    const mapX = flying ? fly.x : mode === 'walking' ? walker.x : vehicleBody.position.x;
+    const mapZ = flying ? fly.z : mode === 'walking' ? walker.z : vehicleBody.position.z;
     let mapYaw = walker.yaw;
     if (flying) mapYaw = fly.yaw + Math.PI; // the fly camera's 0 faces -Z
     else if (mode === 'driving') {
-      back.set(0, 0, 1).applyQuaternion(car.body.quaternion);
+      back.set(0, 0, 1).applyQuaternion(vehicleBody.quaternion);
       mapYaw = Math.atan2(back.x, back.z);
     }
     mapOverlay.redraw(mapX, mapZ, mapYaw);
   }
-  if (hud.isStorageOpen() && (flying || (mode === 'walking' && currentTarget?.kind !== 'truck'))) closeBed();
+  if (hud.isStorageOpen() && (flying || (mode === 'walking' &&
+    (storageVehicle ? Math.hypot(walker.x - storageVehicle.model.position.x, walker.z - storageVehicle.model.position.z) > 7 : currentTarget?.kind !== 'truck')))) closeBed();
   if (hud.isTradeOpen() && (flying || mode !== 'walking' || currentTarget?.kind !== 'trader')) hud.closeTrade();
   hud.setMode(flying ? 'walking' : mode);
-  hud.setSpeed(Math.abs(sim.speed()) * 3.6);
+  hud.setSpeed(Math.abs((rigDriving ? rig.physics : sim).speed()) * 3.6);
   if (bench.active) {
     hud.setPrompt(null);
     hud.setHint('');
@@ -1281,7 +1905,10 @@ renderer.setAnimationLoop((now) => {
     if (hud.isStorageOpen() || hud.isTradeOpen()) {
       prompt = null;
     } else if (mode === 'walking' && currentTarget && !unloading) {
-      if (currentTarget.kind === 'truck') {
+      if (currentTarget.kind === 'rig') {
+        const vehicle = rigs[currentTarget.id];
+        prompt = {key:'E',text:vehicle.complete() ? `${vehicle.name} - drive${vehicle.storage ? ' / cargo storage' : ''}` : `Restore ${vehicle.name} - inspect & fit cargo`};
+      } else if (currentTarget.kind === 'truck') {
         const zone = truckZone(truckObb(), walker.x, walker.z);
         if (carrying) {
           const check = checkFit(carBuild, carrying, inventory, hoodOpen);
@@ -1315,7 +1942,7 @@ renderer.setAnimationLoop((now) => {
         const id = currentTarget.id;
         const pick = pickups.find((p) => p.id === id);
         const name = pick ? ITEMS[pick.item].name : 'thing';
-        prompt = { key: 'E', text: pick?.item === 'rig_tire' ? `Take the ${name}   (too big for the El Cajon, but you'll want it later)` : `Take the ${name}` };
+        prompt = { key: 'E', text: pick?.item === 'rig_tire' ? `Take the ${name} for the salvage-yard big rig` : `Take the ${name}` };
       } else if (currentTarget.kind === 'part') {
         const id = currentTarget.id;
         const part = looseParts.find((p) => p.id === id);
@@ -1330,14 +1957,23 @@ renderer.setAnimationLoop((now) => {
     } else if (mode === 'walking' && carrying && !unloading) {
       prompt = { key: 'E', text: `Put the ${PARTS[carrying].name} down` };
     } else if (mode === 'walking' && !unloading && canStartUnload()) {
-      prompt = { key: 'U', text: 'Unload containers' };
+      prompt = { key: 'U', text: 'Load / unload flatbed containers' };
     } else if (mode === 'driving' && seat === 'passenger') {
       prompt = { key: 'C', text: "Switch to the driver's seat   (you can't drive from here)" };
     } else if (mode === 'driving' && Math.abs(sim.speed()) <= 3) {
       prompt = cargo.length > 0 ? { key: 'U', text: 'Unload containers   (E: get out)' } : { key: 'E', text: 'Get out' };
     }
+    if (rigDriving) prompt = {key:'E', text: Math.abs(rig.physics.speed()) > 3 ? `Slow down to exit ${rig.name}` : `Exit ${rig.name} | ${rig.storage ? 'Tab: cargo storage' : `H: ${towingRig === rig ? 'unhook flatbed | U: containers' : 'hook up flatbed'}`}`};
+    else if (mode === 'walking' && !unloading && !currentTarget && truckDistance() < 7)
+      prompt = { key: 'H', text: 'Flatbed trailer - back a big rig under the front kingpin to hook up' };
     hud.setPrompt(flying ? null : prompt);
-    hud.setHint('Esc  Menu & controls');
+    if (mode === 'walking' && !currentTarget && !carrying && !hud.isStorageOpen() && !hud.isTradeOpen()) {
+      if (nearPlanerBench()) prompt = { key: 'E', text: 'Use planer bench - 1 log makes 4 planks' };
+      else if (nearBench('basicbench')) prompt = { key: 'E', text: 'Use toolbox bench - craft tools or pack it up' };
+      else if (targetedHarvestTree()) prompt = { key: 'E', text: countItem(inventory, 'axe') ? 'Chop tree for logs (3 chops)' : 'Tree - find or craft an axe to chop' };
+      hud.setPrompt(prompt);
+    }
+    hud.setHint('K  Build / craft   Esc  Menu & controls');
     hud.setDebug(flying ? `${liveText}\nx ${fly.x.toFixed(0)}  z ${fly.z.toFixed(0)}  height ${fly.y.toFixed(0)} m  speed ${flySpeed.toFixed(0)} m/s` : '');
   }
 });

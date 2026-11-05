@@ -32,7 +32,9 @@ it('organizes six homes into two street-facing rows with a shared rear garden st
   expect(town.lawns).toHaveLength(7);
   expect(town.trees).toHaveLength(8);
   for (const tree of town.trees!) expect(town.solids.some(s => s.x === tree.x && s.z === tree.z && s.hx === 0.2)).toBe(true);
-  expect(new Set(town.containers.map(c => c.id)).size).toBe(6);
+  expect(new Set(town.containers.map(c => c.id)).size).toBe(town.containers.length);
+  expect(town.containers.filter(c => c.kind === 'crate')).toHaveLength(6);
+  expect(town.containers.filter(c => c.kind === 'wood_bundle')).toHaveLength(1);
   expect(Math.min(...town.containers.map(c => c.id))).toBe(100);
   for (const b of town.buildings) {
     const side = Math.sign(b.z - town.center.z);

@@ -3,10 +3,15 @@ import { addItem, createInventory, type Inventory } from './inventory';
 
 // Storage on a vehicle: the El Cajon's bed. It is just another inventory, so every vehicle can have its own.
 
-export const BED_SLOTS = 24;
+export const BED_SLOTS = 28;
+export const BOX_TRUCK_SLOTS = 96;
+
+export function createBoxStorage(): Inventory {
+  return createInventory(BOX_TRUCK_SLOTS);
+}
 
 export function createStorage(slots = BED_SLOTS): Inventory {
-  return createInventory(slots);
+  return { ...createInventory(slots), storage: 'vehicle' };
 }
 
 export interface MoveResult {

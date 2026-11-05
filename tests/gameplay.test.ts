@@ -15,10 +15,31 @@ import { newContainerState, openContainer, rollLoot } from '../src/rules/loot';
 import { makeRandom } from '../src/rules/scatter';
 import { PARTS, PART_KINDS } from '../src/rules/carParts';
 import { pieceBox } from '../src/rules/baseWorld';
-import { boxesOverlap, generateTown, insideWorkshop, LOT, reachableContainers, ROAD, storeAt, storeInterior, storeWalls, YARD } from '../src/rules/town';
+import { boxesOverlap, generateTown, insideWorkshop, LOT, reachableContainers, ROAD, salvageYardStops, storeAt, storeInterior, storeWalls, YARD } from '../src/rules/town';
 import { lookWalker, stepWalker, WALKER, type Walker } from '../src/rules/walker';
 
 describe('data', () => {
+  it('orders salvage-yard stops from the starter through rotated remote gates, skipping other towns', () => {
+    const starter = generateTown(1);
+    const ordinary = generateTown(2, { x: 1000, z: 1000 }, { junkyard: false });
+    const remotes = [0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((yaw, i) => {
+      const site = generateTown(i + 3, { x: 2000 + i * 100, z: 3000 }, { junkyard: false });
+      site.salvage = { yard: generateTown(10).junkyard, yaw };
+      return site;
+    });
+    const stops = salvageYardStops([starter, ordinary, ...remotes]);
+    expect(stops).toHaveLength(5);
+    expect(stops[0]).toEqual({ x: starter.junkyard.gateX, z: starter.playerSpawn.z, yaw: Math.PI });
+    remotes.forEach((site, i) => {
+      const { yard, yaw } = site.salvage!;
+      const stop = stops[i + 1];
+      const dx = stop.x - site.center.x, dz = stop.z - site.center.z;
+      expect(dx * Math.cos(yaw) - dz * Math.sin(yaw)).toBeCloseTo(yard.gateX);
+      expect(dx * Math.sin(yaw) + dz * Math.cos(yaw)).toBeCloseTo(yard.z + yard.hz + 3);
+      expect(stop.yaw).toBeCloseTo(yaw + Math.PI);
+    });
+    expect(salvageYardStops([])).toEqual([]);
+  });
   it('only references items that exist', () => {
     for (const def of Object.values(CONTAINERS)) {
       for (const e of def.loot) expect(ITEMS[e.item], `${def.kind} -> ${e.item}`).toBeDefined();

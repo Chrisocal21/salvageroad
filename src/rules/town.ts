@@ -50,10 +50,12 @@ export interface ContainerSpawn extends Box2 {
 /** Something you cannot walk or drive through, with its height. */
 export interface Solid extends Box2 {
   height: number;
+  tree?: boolean;
 }
 
 /** A dead car in the junkyard. Lies along X when turned is true, otherwise along Z. */
 export interface Wreck extends Solid {
+  model?: 'big-rig';
   turned: boolean;
   color: number;
 }
@@ -133,6 +135,20 @@ export function localBox(ox: number, oz: number, yaw: number, lx: number, lz: nu
   const [x, z] = toWorld(ox, oz, yaw, lx, lz);
   const quarter = Math.abs(Math.sin(yaw)) > 0.5;
   return { x, z, hx: quarter ? lhz : lhx, hz: quarter ? lhx : lhz };
+}
+
+/** Gate approaches in world coordinates, facing into each salvage yard. */
+export function salvageYardStops(towns: Town[]): { x: number; z: number; yaw: number }[] {
+  return towns.flatMap(town => {
+    if (town.salvage) {
+      const { yard, yaw } = town.salvage;
+      const [x, z] = toWorld(town.center.x, town.center.z, yaw, yard.gateX, yard.z + yard.hz + 3);
+      return [{ x, z, yaw: yaw + Math.PI }];
+    }
+    return town.hasJunkyard !== false
+      ? [{ x: town.junkyard.gateX, z: town.playerSpawn.z, yaw: Math.PI }]
+      : [];
+  });
 }
 
 /** Half the store's width across its front, and half its depth, in its own frame. */
@@ -298,6 +314,7 @@ export function generateTown(seed: number, center = { x: 0, z: 100 }, options: {
     solids.push(...junkyard.fence, ...junkyard.wrecks, ...workshopWalls(junkyard), ...junkyard.tires, { x: cargoBox.x, z: cargoBox.z, hx: cargoBox.hx, hz: cargoBox.hz, height: cargoBox.height });
     if (junkyard.trader) solids.push(junkyard.trader.counter, junkyard.trader.person);
   }
+  placeWoodBundles(containers, roadsX, roadsZ[0]);
   for (const c of containers) c.id += options.containerOffset ?? 0;
 
   return {
@@ -342,7 +359,7 @@ function generateStreetDistrict(seed: number, center: { x: number; z: number }, 
       town.containers.push({ id: offset + town.containers.length, kind: 'crate', x: b.x,
         z: b.z - side * (b.hz + def.hz + 0.7), hx: def.hx, hz: def.hz, height: def.height });
     }
-    town.solids.push(...town.trees.map(t => ({ x: t.x, z: t.z, hx: 0.2, hz: 0.2, height: t.height * 0.65 })));
+    town.solids.push(...town.trees.map(t => ({ x: t.x, z: t.z, hx: 0.2, hz: 0.2, height: t.height * 0.65, tree: true })));
   } else {
     town.yard = { x: center.x, z: center.z + 7, hx: 23, hz: 17 };
     town.parking = { x: center.x, z: center.z + 3, hx: 21, hz: 3 };
@@ -356,7 +373,27 @@ function generateStreetDistrict(seed: number, center: { x: number; z: number }, 
     }
     for (const c of town.containers) c.id += offset;
   }
+  placeWoodBundles(town.containers, town.roadsX, town.roadsZ[0], offset);
   return town;
+}
+
+/** Low bundles at the road edge use the normal container pickup and persistence path. */
+function placeWoodBundles(containers: ContainerSpawn[], roadsX: number[], northRoad: number, offset = 0) {
+  const def = CONTAINERS.wood_bundle;
+  for (let i = 0; i < roadsX.length - 1; i++) {
+    const midpoint = (roadsX[i] + roadsX[i + 1]) / 2;
+    const z = northRoad + ROAD / 2 + 0.6;
+    const x = [0, -2, 2, -4, 4, -6, 6, -8, 8]
+      .map(shift => midpoint + shift)
+      .find(candidate => !containers.some(c => boxesOverlap(c, { x: candidate, z, hx: def.hx, hz: def.hz }, 0.4)));
+    if (x === undefined) continue;
+    containers.push({
+      id: offset + containers.length, kind: 'wood_bundle',
+      x, z,
+      hx: def.hx, hz: def.hz, height: def.height,
+      fixedLoot: [{ id: 'log', count: 8 }],
+    });
+  }
 }
 
 /** Shelves along the back wall and both side walls of a store, the aisle down the middle left clear. */
@@ -429,6 +466,8 @@ export function generateJunkyard(rand: () => number, x: number, z: number, conta
   // Decorative vehicle silhouettes, including the roof rack and the taller pickup cabs.
   const wreckHeights = [1.60, 1.70, 1.50, 1.25, 1.70];
   wrecks.forEach((w, index) => { w.height = wreckHeights[index]; });
+  // Remote yards offer a later restoration project, clear of the central drive aisle.
+  if (!starter) wrecks.push({ x: x - 8, z: z + 1, hx: 1.65, hz: 4.5, height: 3.6, turned: false, color: 0x805141, model: 'big-rig' });
   const shed: Solid = { x: x + hx - (starter ? 5 : 3), z: z + hz - 3.2, hx: starter ? 3 : 2, hz: starter ? 2.6 : 1.6, height: 2.7 };
   const tires: Solid[] = [
     { x: x - hx + 1.6, z: z - hz + 1.6, hx: 0.55, hz: 0.55, height: 0.9 },
@@ -447,6 +486,9 @@ export function generateJunkyard(rand: () => number, x: number, z: number, conta
     fixedLoot: starter ? [
       { id: 'wrench', count: 1 },
       { id: 'duct_tape', count: 1 },
+      { id: 'axe', count: 1 },
+      { id: 'planer', count: 1 },
+      { id: 'basic_bench', count: 1 },
     ] : undefined,
   };
   containers.push(toolbox);

@@ -62,7 +62,7 @@ export function heightLevels(spec: PieceSpec): number {
   return spec.kind === 'pillar' ? Math.max(1, spec.levels ?? 1) : 1;
 }
 
-const SPAN = 4096;
+const SPAN = 32768;
 export function cellKey(level: number, gx: number, gz: number): number {
   return (level * SPAN + (gx + SPAN / 2)) * SPAN + (gz + SPAN / 2);
 }

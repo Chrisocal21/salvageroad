@@ -6,11 +6,12 @@ import type { Walker } from './walker';
 export const REACH = 2.2; // m from the surface of the thing
 export const LOOK_CONE = 1.0; // radians either side of straight ahead
 
-export type Target = { kind: 'container'; id: number } | { kind: 'part'; id: number } | { kind: 'pickup'; id: number } | { kind: 'trader'; id: number } | { kind: 'truck' };
+export type Target = { kind: 'container'; id: number } | { kind: 'part'; id: number } | { kind: 'pickup'; id: number } | { kind: 'trader'; id: number } | { kind: 'truck' } | { kind: 'rig'; id: number };
 
 export interface Candidates {
   containers: (Box2 & { id: number })[];
   truck: Obb2 | null;
+  rigs?: (Obb2 & { id: number })[];
   /** Loose truck parts lying about, as small boxes. */
   parts?: (Box2 & { id: number })[];
   /** Things lying about that go straight into the pack, such as the big rig tyre. */
@@ -43,6 +44,7 @@ export function findTarget(w: Walker, c: Candidates): Target | null {
   for (const box of c.pickups ?? []) consider({ kind: 'pickup', id: box.id }, distanceToBox(w.x, w.z, box), box.x, box.z);
   for (const box of c.traders ?? []) consider({ kind: 'trader', id: box.id }, distanceToBox(w.x, w.z, box), box.x, box.z);
   if (c.truck) consider({ kind: 'truck' }, distanceToObb(w.x, w.z, c.truck), c.truck.x, c.truck.z);
+  for (const rig of c.rigs ?? []) consider({ kind: 'rig', id: rig.id }, distanceToObb(w.x, w.z, rig), rig.x, rig.z);
   return best;
 }
 

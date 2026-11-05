@@ -3,13 +3,14 @@
 // Real container sizes: 8 ft wide, 8.5 ft tall, 20 ft or 40 ft long. The build grid is 4 ft, so a
 // container is 2 cells wide and 5 or 10 cells long, and half-width offsets are possible.
 
-export type ShippingKind = 'ft20' | 'ft40';
+export type ShippingKind = 'ft10' | 'ft20' | 'ft40';
 
 export interface ShippingKindDef {
   name: string;
   /** Cells along its length and across its width when rotation is 0 (long side along X). */
   long: number;
   wide: number;
+  length: number;
 }
 
 export const SHIPPING = {
@@ -20,7 +21,7 @@ export const SHIPPING = {
   /** Highest level that can be built on (0 is the ground). */
   maxLevel: 7,
   /** Grid limit in cells either side of the origin. */
-  maxCell: 2000,
+  maxCell: 8192,
   /**
    * The support rule: a container above ground needs either
    *  - at least this share of its footprint sitting on something directly below, or
@@ -30,8 +31,10 @@ export const SHIPPING = {
    */
   minSupport: 0.4,
   kinds: {
-    ft20: { name: '20 ft', long: 5, wide: 2 },
-    ft40: { name: '40 ft', long: 10, wide: 2 },
+    // The 10 ft box reserves three 4 ft cells, leaving a little clearance at its ends.
+    ft10: { name: '10 ft', long: 3, wide: 2, length: 3.048 },
+    ft20: { name: '20 ft', long: 5, wide: 2, length: 6.096 },
+    ft40: { name: '40 ft', long: 10, wide: 2, length: 12.192 },
   } satisfies Record<ShippingKind, ShippingKindDef>,
   /** A support pillar fills one grid cell but is drawn as a slimmer post. Width in metres. */
   pillarWidth: 0.5,

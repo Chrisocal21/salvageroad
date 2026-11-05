@@ -1,0 +1,6 @@
+.removal-overlay[hidden] { display: none; }
+.removal-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: #080e10b8; backdrop-filter: blur(7px); color: var(--ui-text); font: 13px/1.6 var(--ui-font); }
+.removal-dialog { box-sizing: border-box; width: min(420px, 100%); max-height: calc(100dvh - 40px); overflow: auto; padding: 24px; background: var(--ui-panel); border: 1px solid var(--ui-edge); border-top: 2px solid var(--ui-accent); border-radius: 4px; box-shadow: var(--ui-shadow); }
+.removal-dialog h2 { margin: 0; font-size: 20px; }
+.removal-dialog p { margin: 12px 0 24px; color: var(--ui-muted); }
+.removal-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }

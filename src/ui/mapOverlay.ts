@@ -4,6 +4,7 @@
 // small one opens the big one.
 
 import type { Place, PlaceKind } from '../rules/places';
+import './theme.css';
 import './mapOverlay.css';
 
 const KIND_COLOUR: Record<PlaceKind, string> = {
@@ -46,17 +47,50 @@ export function createMapOverlay(
   const mini = document.createElement('canvas');
   mini.className = 'map-minimap';
   mini.title = 'M: map';
-  parent.appendChild(mini);
+  mini.tabIndex = 0;
+  mini.setAttribute('role', 'button');
+  mini.setAttribute('aria-label', 'Open region map');
+  const widget = document.createElement('div');
+  widget.className = 'map-widget';
+  const miniHeader = document.createElement('div');
+  miniHeader.className = 'map-mini-label';
+  const regionLabel = document.createElement('span');
+  regionLabel.textContent = 'REGION';
+  const mapKey = document.createElement('span');
+  mapKey.textContent = 'M';
+  miniHeader.append(regionLabel, mapKey);
+  const coordinates = document.createElement('div');
+  coordinates.className = 'map-coordinates';
+  widget.append(miniHeader, mini, coordinates);
+  parent.append(widget);
 
   const overlay = document.createElement('div');
   overlay.className = 'map-overlay';
   overlay.hidden = true;
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Region map');
+  const mapHeader = document.createElement('header');
+  mapHeader.className = 'map-header ui-panel-header';
+  const mapTitle = document.createElement('div');
+  const eyebrow = document.createElement('div');
+  eyebrow.className = 'ui-eyebrow';
+  eyebrow.textContent = 'Salvage Road / Navigation';
+  const heading = document.createElement('h1');
+  heading.textContent = 'Region survey';
+  mapTitle.append(eyebrow, heading);
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.className = 'ui-button';
+  closeButton.textContent = 'Close · M / Esc';
+  closeButton.addEventListener('click', () => api.close());
+  mapHeader.append(mapTitle, closeButton);
   const big = document.createElement('canvas');
   big.className = 'map-big';
   const legend = document.createElement('div');
   legend.className = 'map-legend';
   legend.textContent = 'Click to travel there (testing)   M or Esc closes';
-  overlay.append(big, legend);
+  overlay.append(mapHeader, big, legend);
   parent.appendChild(overlay);
 
   let last = { x: 0, z: 0, yaw: 0 };
@@ -177,6 +211,12 @@ export function createMapOverlay(
   mini.addEventListener('click', () => {
     if (overlay.hidden) api.open();
   });
+  mini.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); api.open(); }
+  });
+  overlay.addEventListener('keydown', event => {
+    if (event.key === 'Tab') { event.preventDefault(); closeButton.focus(); }
+  });
 
   const api: MapOverlay = {
     toggle() {
@@ -185,16 +225,20 @@ export function createMapOverlay(
     },
     open() {
       overlay.hidden = false;
+      closeButton.focus();
       drawBig();
     },
     close() {
+      const wasOpen = !overlay.hidden;
       overlay.hidden = true;
+      if (wasOpen) mini.focus({ preventScroll: true });
     },
     isOpen() {
       return !overlay.hidden;
     },
     redraw(x, z, yaw) {
       last = { x, z, yaw };
+      coordinates.textContent = `X ${Math.round(x).toLocaleString()}  /  Z ${Math.round(z).toLocaleString()}`;
       drawMini();
       if (!overlay.hidden) drawBig();
     },

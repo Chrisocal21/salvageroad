@@ -3,6 +3,7 @@
 export type PropKind = 'tree' | 'crate' | 'rock' | 'shrub' | 'cactus';
 
 export interface Prop {
+  cut?: boolean;
   kind: PropKind;
   x: number;
   z: number;

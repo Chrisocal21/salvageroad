@@ -5,7 +5,7 @@ import type { Prop } from '../rules/scatter';
 // Placeholder props: trees, crates, rocks, scrub and cacti as simple shapes. Each kind is one instanced mesh,
 // so a thousand props cost only a handful of draw calls. groundHeight says how high the ground is at a spot.
 export function createProps(props: Prop[], groundHeight: (x: number, z: number) => number): THREE.Object3D[] {
-  const trunks = props.filter((p) => p.kind === 'tree');
+  const trunks = props.filter((p) => p.kind === 'tree' && !p.cut);
   const crates = props.filter((p) => p.kind === 'crate');
   const rocks = props.filter((p) => p.kind === 'rock');
   const shrubs = props.filter((p) => p.kind === 'shrub');
@@ -29,6 +29,7 @@ export function createProps(props: Prop[], groundHeight: (x: number, z: number) 
     mesh.instanceMatrix.needsUpdate = true;
     mesh.matrixAutoUpdate = false;
     mesh.frustumCulled = false; // props are spread over a wide area, and one box round them all would be useless
+    mesh.userData.props = list;
     return mesh;
   };
 

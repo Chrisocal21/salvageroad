@@ -1,5 +1,9 @@
+import { bedCapacityLabel } from '../rules/bedCapacity';
 import { ITEMS } from '../data/items';
 import type { Inventory } from '../rules/inventory';
+import { assignHotbar, HOTBAR_SIZE, hotbarLabel } from '../rules/hotbar';
+import { itemIcon } from './icons';
+import './theme.css';
 import { appraise, haggle, trade, type Offer, type Trader, type TradeResult } from '../rules/trade';
 import './hud.css';
 
@@ -14,6 +18,9 @@ export interface Hud {
   /** A short message that fades out by itself. */
   toast(text: string): void;
   setInventory(inv: Inventory): void;
+  setHotbarHandler(fn: (index: number) => void): void;
+  assignHotbar(index: number): boolean;
+  setActiveHotbar(index: number | null): void;
   toggleInventory(): void;
   isInventoryOpen(): boolean;
   /** Called when a slot in the inventory panel is clicked. The game decides what that does (eat, drink). */
@@ -30,6 +37,7 @@ export interface Hud {
   /** Redraws the storage panel after something moved. */
   refreshStorage(): void;
   closeStorage(): void;
+  setStorageCloseHandler(fn: () => void): void;
   isStorageOpen(): boolean;
   openTrade(trader: Trader, pack: Inventory): void;
   closeTrade(): void;
@@ -49,6 +57,9 @@ export interface BuildHud {
   /** What the aimed spot would do, such as 'Level 1  +4 pillars', or why it cannot be built. */
   status: string;
   ok: boolean;
+  materials?: string;
+  hideLevel?: boolean;
+  controls?: { key: string; label: string }[];
 }
 
 const TOAST_MS = 4000;
@@ -94,8 +105,24 @@ export function createHud(parent: HTMLElement): Hud {
   const needs = el('div', 'hud-needs', root);
   function needBar(label: string) {
     const row = el('div', 'hud-need', needs);
-    el('span', 'hud-need-label', row, label);
+    row.title = label;
+    row.setAttribute('role', 'progressbar');
+    row.setAttribute('aria-label', label);
+    row.setAttribute('aria-valuemin', '0');
+    row.setAttribute('aria-valuemax', '100');
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.classList.add('hud-need-icon');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    // Fork and knife for food; a filled droplet for water.
+    path.setAttribute('d', label === 'Hunger'
+      ? 'M4 2h2v6h1V2h2v6h1V2h2v7a4 4 0 0 1-3 3.87V22H7v-9.13A4 4 0 0 1 4 9V2Zm15 0h2v20h-3v-8h-3V8c0-3 2-6 4-6Z'
+      : 'M12 2C10 5 4 11 4 15a8 8 0 0 0 16 0c0-4-6-10-8-13Zm-4 13a4 4 0 0 0 4 4v2a6 6 0 0 1-6-6h2Z');
+    icon.appendChild(path);
+    row.appendChild(icon);
     const track = el('div', 'hud-need-track', row);
+    el('span', 'hud-need-value', row, '100%');
     return { row, fill: el('div', 'hud-need-fill', track) };
   }
   const hungerBar = needBar('Hunger');
@@ -104,24 +131,54 @@ export function createHud(parent: HTMLElement): Hud {
     const pct = Math.round(Math.min(100, Math.max(0, value)));
     const width = `${pct}%`;
     if (bar.fill.style.width !== width) bar.fill.style.width = width;
+    if (bar.row.getAttribute('aria-valuenow') !== String(pct)) {
+      bar.row.setAttribute('aria-valuenow', String(pct));
+      bar.row.querySelector('.hud-need-value')!.textContent = `${pct}%`;
+    }
     bar.row.classList.toggle('low', pct < 25);
   }
 
-  const panel = el('div', 'hud-inventory', root);
+  const inventoryOverlay = el('div', 'hud-menu-overlay', root);
+  inventoryOverlay.hidden = true;
+  const panel = el('section', 'hud-inventory', inventoryOverlay);
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  panel.setAttribute('aria-label', 'Inventory');
+  el('div', 'ui-eyebrow', panel, 'Salvage Road / Field equipment');
   const title = el('div', 'hud-inventory-title', panel);
   el('span', '', title, 'Carrying');
   const count = el('span', 'hud-inventory-count', title);
+  const closeInventoryButton = el('button', 'ui-button ui-close', title, 'Close · Esc');
+  closeInventoryButton.type = 'button';
+  closeInventoryButton.addEventListener('click', () => showInventory(false));
   const slotsEl = el('div', 'hud-slots', panel);
-  el('div', 'hud-inventory-hint', panel, 'Click food or drink to use it   Tab, I or Esc to close');
+  const inventoryHint = el('div', 'hud-inventory-hint', panel, 'Assign an item, then press 1–9 or 0 to swap it onto the hotbar. Click food/drink to use. Tab, I or Esc closes.');
   panel.hidden = true;
   let lastInventory: Inventory | null = null;
   let consumeHandler: ((index: number) => void) | null = null;
 
-  // The hotbar: what you carry, always visible at the bottom centre. Display only.
+  let assigningSlot: number | null = null;
+  let activeHotbar: number | null = null;
+  let hotbarHandler: ((index: number) => void) | null = null;
+  // The first ten pack slots are the hotbar; remaining slots stay in the inventory.
   const hotbar = el('div', 'hud-hotbar', root);
 
   // Vehicle storage: two grids side by side. Clicking a slot moves that stack across.
-  const storageEl = el('div', 'hud-storage', root);
+  const storageOverlay = el('div', 'hud-menu-overlay', root);
+  storageOverlay.hidden = true;
+  const storageEl = el('section', 'hud-storage', storageOverlay);
+  storageEl.setAttribute('role', 'dialog');
+  storageEl.setAttribute('aria-modal', 'true');
+  storageEl.setAttribute('aria-label', 'Vehicle storage');
+  const storageHeader = el('div', 'hud-storage-header', storageEl);
+  el('div', 'ui-eyebrow', storageHeader, 'Cargo / Inventory transfer');
+  const closeStorageButton = el('button', 'ui-button', storageHeader, 'Close · Esc');
+  closeStorageButton.type = 'button';
+  let storageCloseHandler: (() => void) | null = null;
+  closeStorageButton.addEventListener('click', () => {
+    if (storageCloseHandler) storageCloseHandler();
+    else hideStorage();
+  });
   const storageSides = [el('div', 'hud-storage-side', storageEl), el('div', 'hud-storage-side', storageEl)];
   const storageHeads = storageSides.map((side) => {
     const head = el('div', 'hud-inventory-title', side);
@@ -254,10 +311,12 @@ export function createHud(parent: HTMLElement): Hud {
   });
 
   const buildEl = el('div', 'hud-build', root);
-  const buildStatus = el('div', 'hud-build-status', buildEl);
   const buildTitle = el('div', 'hud-build-title', buildEl);
   const buildRow = el('div', 'hud-build-row', buildEl);
+  const buildMaterials = el('div', 'hud-build-materials', buildEl);
+  const buildStatus = el('div', 'hud-build-status', buildEl);
   const buildLevel = el('div', 'hud-build-level', buildEl);
+  const buildControls = el('div', 'hud-build-controls', buildEl);
   buildEl.hidden = true;
   let lastBuild = '';
 
@@ -282,10 +341,10 @@ export function createHud(parent: HTMLElement): Hud {
   resume.addEventListener('click', () => resumeHandler());
   const controls = el('div', 'hud-controls', pausePanel);
   const groups: [string, [string, string][]][] = [
-    ['On foot & essentials', [['W A S D / Arrows', 'Move'], ['Mouse', 'Look around (click game to capture)'], ['Shift', 'Run'], ['E', 'Interact / enter or leave vehicle'], ['Tab / I', 'Inventory / vehicle storage'], ['F / Q', 'Eat / drink'], ['M', 'Map'], ['Esc', 'Close a panel / pause or resume']]],
-    ['Driving', [['W / S', 'Accelerate / brake & reverse'], ['A / D', 'Steer'], ['Arrows', 'Alternative driving controls'], ['Space', 'Handbrake'], ['C', 'Switch seats'], ['V', 'Flip truck upright']]],
-    ['Building & unloading', [['U', 'Start / finish unloading'], ['1–9', 'Choose cargo'], ['Left click', 'Place container'], ['Right click', 'Pick up container'], ['R', 'Rotate while unloading'], ['Wheel / PgUp / PgDn', 'Change build level']]],
-    ['Testing & world tools', [['R', 'Reset to town (outside build mode)'], ['J', 'Jump to town'], ['G', 'Toggle fly mode'], ['W A S D · Q / E', 'Fly · descend / ascend (Space also ascends)'], ['Shift / Wheel', 'Fly faster / adjust flight speed'], ['T', 'Land on foot from fly mode'], ['N / [ / ]', 'New / previous / next world seed'], ['B / X', 'Toggle performance run / hide results']]],
+    ['On foot & essentials', [['W A S D / Arrows', 'Move'], ['Mouse', 'Look around (click game to capture)'], ['Shift', 'Run'], ['E', 'Interact / enter or leave vehicle / built doors'], ['K', 'Wood build menu / craft build hammer'], ['Tab / I', 'Inventory / vehicle storage'], ['F / Q', 'Eat / drink'], ['M', 'Map'], ['Esc', 'Close a panel / pause or resume']]],
+    ['Driving', [['W / S', 'Accelerate / brake & reverse'], ['A / D', 'Steer'], ['Arrows', 'Alternative driving controls'], ['Space', 'Handbrake'], ['C', 'Switch seats'], ['H', 'Hook / unhook flatbed (big rig, stopped)'], ['V', 'Flip truck upright']]],
+    ['Building & unloading', [['1–0', 'Equip hotbar item / start bench placement'], ['K', 'Build menu / choose hauled container'], ['U', 'Start / finish unloading'], ['Left click', 'Place equipped piece'], ['Right click', 'Dismantle / pick up'], ['R', 'Rotate equipped piece'], ['Wheel / PgUp / PgDn', 'Change build level']]],
+    ['Testing & world tools', [['R', 'Reset to town (outside build mode)'], ['J', 'Cycle through salvage yards'], ['G', 'Toggle fly mode'], ['W A S D · Q / E', 'Fly · descend / ascend (Space also ascends)'], ['Shift / Wheel', 'Fly faster / adjust flight speed'], ['T', 'Land on foot from fly mode'], ['N / [ / ]', 'New / previous / next world seed'], ['B / X', 'Toggle performance run / hide results']]],
   ];
   for (const [heading, bindings] of groups) {
     const section = el('section', 'hud-control-group', controls);
@@ -311,12 +370,22 @@ export function createHud(parent: HTMLElement): Hud {
         const slot = el('div', s ? (usable ? 'hud-slot usable' : 'hud-slot') : 'hud-slot empty');
         if (s) {
           slot.style.borderLeftColor = KIND_COLOUR[ITEMS[s.id].kind] ?? 'transparent';
-          slot.textContent = ITEMS[s.id].name;
+          slot.append(itemIcon(s.id));
+          el('span', 'hud-slot-name', slot, ITEMS[s.id].name);
           if (s.count > 1) el('span', 'hud-slot-count', slot, String(s.count));
           if (usable) {
             slot.title = `Click to ${ITEMS[s.id].kind === 'food' ? 'eat' : 'drink'}`;
             slot.addEventListener('click', () => consumeHandler?.(index));
           }
+          const assign = el('button', 'hud-assign', slot, 'Assign');
+          assign.type = 'button';
+          assign.setAttribute('aria-label', `Assign ${ITEMS[s.id].name} to hotbar`);
+          assign.addEventListener('click', event => {
+            event.stopPropagation();
+            assigningSlot = index;
+            inventoryHint.textContent = `Assigning ${ITEMS[s.id].name}: press 1–9 or 0, or click a hotbar slot. Existing items swap safely.`;
+          });
+          if (index < HOTBAR_SIZE) slot.title = `${slot.title ? `${slot.title} · ` : ''}Hotbar ${hotbarLabel(index)}`;
         }
         return slot;
       }),
@@ -326,17 +395,38 @@ export function createHud(parent: HTMLElement): Hud {
   function renderHotbar() {
     if (!lastInventory) return;
     hotbar.replaceChildren(
-      ...lastInventory.slots.map((s) => {
-        const slot = el('div', s ? 'hud-hotbar-slot' : 'hud-hotbar-slot empty');
+      ...Array.from({ length: HOTBAR_SIZE }, (_, index) => {
+        const s = lastInventory!.slots[index] ?? null;
+        const slot = el('button', s ? 'hud-hotbar-slot' : 'hud-hotbar-slot empty');
+        slot.type = 'button';
+        slot.classList.toggle('selected', activeHotbar === index);
+        slot.setAttribute('aria-label', `${hotbarLabel(index)}: ${s ? ITEMS[s.id].name : 'empty'}`);
+        slot.setAttribute('aria-pressed', String(activeHotbar === index));
+        el('span', 'hud-hotbar-key', slot, hotbarLabel(index));
+        slot.addEventListener('click', () => {
+          if (!panel.hidden) assignSelected(index);
+          else hotbarHandler?.(index);
+        });
         if (s) {
+          slot.append(itemIcon(s.id));
           slot.style.borderTopColor = KIND_COLOUR[ITEMS[s.id].kind] ?? 'transparent';
           slot.title = ITEMS[s.id].name;
           el('span', 'hud-hotbar-name', slot, ITEMS[s.id].name);
           if (s.count > 1) el('span', 'hud-slot-count', slot, String(s.count));
         }
+
         return slot;
       }),
     );
+  }
+
+  function assignSelected(index: number): boolean {
+    if (!lastInventory || assigningSlot === null || !assignHotbar(lastInventory, assigningSlot, index)) return false;
+    assigningSlot = null;
+    inventoryHint.textContent = 'Assigned. Choose another item with Assign, or close inventory and press its number to equip.';
+    renderInventory();
+    renderHotbar();
+    return true;
   }
 
   function renderStorage(titleText: string) {
@@ -348,12 +438,13 @@ export function createHud(parent: HTMLElement): Hud {
     ];
     sides.forEach((side, i) => {
       storageHeads[i].name.textContent = side.name;
-      storageHeads[i].count.textContent = `${side.inv.slots.filter((s) => s !== null).length} of ${side.inv.slots.length}`;
+      storageHeads[i].count.textContent = side.inv.storage === 'vehicle' ? bedCapacityLabel(side.inv) : `${side.inv.slots.filter((s) => s !== null).length} of ${side.inv.slots.length}`;
       storageGrids[i].replaceChildren(
         ...side.inv.slots.map((s, index) => {
           const slot = el('div', s ? 'hud-slot full' : 'hud-slot empty');
           if (s) {
-            slot.textContent = ITEMS[s.id].name;
+            slot.append(itemIcon(s.id));
+            el('span', 'hud-slot-name', slot, ITEMS[s.id].name);
             if (s.count > 1) el('span', 'hud-slot-count', slot, String(s.count));
             slot.addEventListener('click', () => st.onMove(side.from, index));
           }
@@ -363,6 +454,23 @@ export function createHud(parent: HTMLElement): Hud {
     });
   }
   let storageTitle = '';
+  let inventoryFocus: HTMLElement | null = null;
+  function showInventory(open: boolean) {
+    if (open) inventoryFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panel.hidden = inventoryOverlay.hidden = !open;
+    root.classList.toggle('inventory-open', open);
+    assigningSlot = null;
+    if (open) {
+      inventoryHint.textContent = 'Assign an item, then press 1-9 or 0. Existing stacks swap safely. Tab / I / Esc closes.';
+      renderInventory(); renderHotbar();
+      closeInventoryButton.focus();
+    } else inventoryFocus?.focus();
+  }
+  function hideStorage() {
+    storageState = null;
+    storageEl.hidden = storageOverlay.hidden = true;
+    root.classList.remove('storage-open');
+  }
 
   return {
     setPaused(paused) {
@@ -376,9 +484,8 @@ export function createHud(parent: HTMLElement): Hud {
     openTrade(trader, pack) {
       if (!tradeOverlay.hidden) closeTrade();
       tradeFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      panel.hidden = true;
-      storageEl.hidden = true;
-      storageState = null;
+      showInventory(false);
+      hideStorage();
       tradeState = { trader, pack, give: [], get: [], message: '' };
       tradeTitle.textContent = `${trader.name} - ${trader.specialty === 'tools-parts' ? 'Tools and vehicle parts' : 'Salvage yard barter'}`;
       tradeOverlay.hidden = false;
@@ -389,18 +496,19 @@ export function createHud(parent: HTMLElement): Hud {
     closeTrade,
     isTradeOpen: () => !tradeOverlay.hidden,
     openStorage(titleText, store, pack, onMove) {
+      showInventory(false);
       storageState = { store, pack, onMove };
       storageTitle = titleText;
-      storageEl.hidden = false;
+      storageEl.hidden = storageOverlay.hidden = false;
+      root.classList.add('storage-open');
       renderStorage(titleText);
+      closeStorageButton.focus();
     },
     refreshStorage() {
       if (!storageEl.hidden) renderStorage(storageTitle);
     },
-    closeStorage() {
-      storageState = null;
-      storageEl.hidden = true;
-    },
+    closeStorage: hideStorage,
+    setStorageCloseHandler(fn) { storageCloseHandler = fn; },
     isStorageOpen() {
       return !storageEl.hidden;
     },
@@ -425,12 +533,11 @@ export function createHud(parent: HTMLElement): Hud {
       renderHotbar();
       if (!panel.hidden) renderInventory();
     },
+    setHotbarHandler(fn) { hotbarHandler = fn; },
+    assignHotbar(index) { return assignSelected(index); },
+    setActiveHotbar(index) { activeHotbar = index; renderHotbar(); },
     toggleInventory() {
-      panel.hidden = !panel.hidden;
-      if (!panel.hidden) {
-        renderInventory();
-        renderHotbar();
-      }
+      showInventory(!!panel.hidden);
     },
     isInventoryOpen() {
       return !panel.hidden;
@@ -465,14 +572,25 @@ export function createHud(parent: HTMLElement): Hud {
       buildTitle.textContent = build.title ?? '';
       buildTitle.hidden = !build.title;
       buildRow.replaceChildren(
-        ...build.items.map((item, i) => {
+        ...build.items.map((item) => {
           const slot = el('div', item.selected ? 'hud-build-item on' : 'hud-build-item');
-          el('span', 'hud-build-key', slot, String(i + 1));
           el('span', '', slot, item.name);
           return slot;
         }),
       );
-      buildLevel.textContent = `Build level ${build.level}   (mouse wheel)`;
+      buildMaterials.textContent = build.materials ?? '';
+      buildMaterials.hidden = !build.materials;
+      buildLevel.textContent = `Level ${build.level}`;
+      buildLevel.hidden = !!build.hideLevel;
+      buildLevel.title = 'PgUp / PgDn changes build level';
+      buildControls.replaceChildren(...(build.controls ?? [
+        { key: 'LMB', label: 'Place' }, { key: 'R', label: 'Rotate' }, { key: 'K', label: 'Menu' },
+      ]).map(({ key, label }) => {
+        const control = el('span', '');
+        el('kbd', '', control, key);
+        el('span', '', control, label);
+        return control;
+      }));
     },
     setHint(text) {
       if (hint.textContent !== text) hint.textContent = text;

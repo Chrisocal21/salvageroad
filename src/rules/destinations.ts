@@ -105,7 +105,7 @@ export function generateDestinations(seed: number, plan: Plan, network: RoadNetw
       const yard = generateJunkyard(makeRandom(seed * 31 + p.id * 7919), 0, 0, containers, false);
       const yaw = (turn + 2) * Math.PI / 2;
       site.salvage = { yard, yaw };
-      for (const box of [...yard.fence, ...yard.wrecks, yard.shed, ...yard.tires])
+      for (const box of [...yard.fence, ...yard.wrecks.filter(w => w.model !== 'big-rig'), yard.shed, ...yard.tires])
         site.solids.push({ ...localBox(cx, cz, yaw, box.x, box.z, box.hx, box.hz), height: box.height });
       for (const c of containers)
         site.containers.push({ ...c, ...localBox(cx, cz, yaw, c.x, c.z, c.hx, c.hz), id: offset++ });
@@ -162,6 +162,11 @@ export function generateDestinations(seed: number, plan: Plan, network: RoadNetw
     }
     site.solids.push(...site.fixtures);
     sites.push(site);
+  }
+  const salvageSites = sites.filter(s => s.salvage);
+  if (salvageSites.length > 1) {
+    const trailerYard = salvageSites.at(-1)!.salvage!.yard;
+    trailerYard.wrecks = trailerYard.wrecks.filter(w => w.model !== 'big-rig');
   }
   return sites;
 }

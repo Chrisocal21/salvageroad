@@ -1,48 +1,24 @@
-/* The map: a small one in the corner, a big one over the page on M. */
-.map-minimap {
-  position: fixed;
-  right: 22px;
-  bottom: 18px;
-  width: 136px;
-  height: 136px;
-  border: 1px solid rgba(236, 232, 223, 0.25);
-  border-radius: 2px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
-  cursor: pointer;
-  z-index: 5;
-}
-
-.map-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  background: rgba(8, 10, 12, 0.72);
-  z-index: 8;
-}
-
-.map-big {
-  width: min(86vmin, 900px);
-  height: min(86vmin, 900px);
-  border: 1px solid rgba(236, 232, 223, 0.3);
-  border-radius: 8px;
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.6);
-  cursor: crosshair;
-}
-
-.map-legend {
-  color: rgba(236, 232, 223, 0.65);
-  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
-}
-
-.map-overlay[hidden],
-.map-minimap[hidden] {
-  display: none !important;
-}
-
-@media (max-width: 700px) {
-  .map-minimap { top: 18px; bottom: auto; right: 18px; width: 100px; height: 100px; }
+.map-widget { position: fixed; right: 24px; top: 24px; width: 140px; color: var(--ui-muted); font: 9px/1.5 var(--ui-font); z-index: 5; }
+.map-mini-label { display: flex; justify-content: space-between; white-space: pre; margin-bottom: 5px; letter-spacing: .14em; color: #e6e8dfb0; text-shadow: 0 1px 3px #000; }
+.map-minimap { display: block; width: 140px; height: 140px; border: 1px solid #d3b07555; border-radius: 3px; box-shadow: 0 4px 20px #0005; cursor: pointer; opacity: .9; }
+.map-minimap:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.map-coordinates { margin-top: 5px; text-align: right; color: #e6e8dfb0; text-shadow: 0 1px 3px #000; font-size: 9px; font-variant-numeric: tabular-nums; }
+.map-overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; background: #080e10ed; backdrop-filter: blur(7px); z-index: 40; }
+.map-header { width: min(74vmin, 800px); flex-shrink: 0; }
+.map-header h1 { font-size: 24px; }
+.map-big { display: block; width: min(74vmin, 800px); height: min(74vmin, 800px); border: 1px solid #d3b07555; border-radius: 3px; box-shadow: var(--ui-shadow); cursor: crosshair; }
+.map-legend { max-width: 90vw; color: var(--ui-muted); font: 11px/1.5 var(--ui-font); text-align: center; }
+.map-overlay[hidden], .map-minimap[hidden] { display: none !important; }
+body:has(.hud:is(.paused, .trading, .inventory-open, .storage-open)) .map-widget,
+body:has(.wood-build-menu:not([hidden])) .map-widget,
+body:has(.hud-workshop:not([hidden])) .map-widget { visibility: hidden; }
+@media (max-width: 650px) {
+  .map-widget { top: 16px; right: 16px; width: 100px; }
+  .map-minimap { width: 100px; height: 100px; }
+  .map-mini-label, .map-coordinates { font-size: 8px; }
+  .map-mini-label { letter-spacing: .04em; }
+  .map-overlay { padding: 16px; }
+  .map-header, .map-big { width: min(90vw, 68dvh); }
+  .map-big { height: min(90vw, 68dvh); }
+  .map-header h1 { font-size: 20px; }
 }

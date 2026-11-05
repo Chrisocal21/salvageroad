@@ -25,6 +25,13 @@ export interface CarSim {
   setFocus?(x: number, z: number): void;
   /** Sets a flipped or tilted car back on its wheels, keeping its heading. Optional: only the Rapier world supports it. */
   flipUpright?(): void;
+  setVehicleObstacle?(pose: Pose, halfExtents: readonly [number, number, number], id?: number): void;
+  removeVehicleObstacle?(id: number): void;
+  removeTree?(x: number, z: number): void;
+  attachTrailer?(pose: Pose): void;
+  detachTrailer?(): void;
+  trailerPose?(): Pose | null;
+  setTrailerCargo?(lengths: number[]): void;
 }
 
 // The longer cargo bed adds rear overhang. Recenter the chassis and axle positions together.

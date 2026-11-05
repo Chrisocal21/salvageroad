@@ -1,6 +1,6 @@
 // Content as data: the kinds of lootable container, their size, and what they can hold.
 
-export type ContainerKind = 'crate' | 'locker' | 'dumpster' | 'toolbox' | 'market_shelf' | 'hardware_shelf';
+export type ContainerKind = 'crate' | 'locker' | 'dumpster' | 'toolbox' | 'market_shelf' | 'hardware_shelf' | 'wood_bundle';
 
 /** The kinds found outside, against the walls of buildings. Shelves are only found inside stores. */
 export const OUTSIDE_KINDS: ContainerKind[] = ['crate', 'locker', 'dumpster', 'toolbox'];
@@ -27,6 +27,16 @@ export interface ContainerDef {
 }
 
 export const CONTAINERS: Record<ContainerKind, ContainerDef> = {
+  wood_bundle: {
+    kind: 'wood_bundle',
+    name: 'log pile',
+    hx: 0.65,
+    hz: 0.3,
+    height: 0.25,
+    color: 0x9a7b4f,
+    rolls: [1, 1],
+    loot: [{ item: 'log', weight: 1, min: 8, max: 8 }],
+  },
   crate: {
     kind: 'crate',
     name: 'crate',
@@ -43,6 +53,7 @@ export const CONTAINERS: Record<ContainerKind, ContainerDef> = {
       { item: 'jerky', weight: 2, min: 1, max: 2 },
       { item: 'rope', weight: 1, min: 1, max: 1 },
       { item: 'scrap_metal', weight: 1, min: 1, max: 4 },
+      { item: 'log', weight: 2, min: 4, max: 8 },
     ],
   },
   market_shelf: {
@@ -72,6 +83,10 @@ export const CONTAINERS: Record<ContainerKind, ContainerDef> = {
     rolls: [1, 3],
     loot: [
       { item: 'duct_tape', weight: 4, min: 1, max: 2 },
+      { item: 'log', weight: 4, min: 4, max: 12 },
+      { item: 'axe', weight: 2, min: 1, max: 1 },
+      { item: 'planer', weight: 2, min: 1, max: 1 },
+      { item: 'basic_bench', weight: 2, min: 1, max: 1 },
       { item: 'rope', weight: 3, min: 1, max: 2 },
       { item: 'batteries', weight: 3, min: 1, max: 3 },
       { item: 'wrench', weight: 2, min: 1, max: 1 },
@@ -119,6 +134,8 @@ export const CONTAINERS: Record<ContainerKind, ContainerDef> = {
     color: 0xb33a2e,
     rolls: [1, 2],
     loot: [
+      { item: 'axe', weight: 2, min: 1, max: 1 },
+      { item: 'planer', weight: 2, min: 1, max: 1 },
       { item: 'wrench', weight: 2, min: 1, max: 1 },
       { item: 'duct_tape', weight: 3, min: 1, max: 2 },
       { item: 'scrap_metal', weight: 3, min: 1, max: 3 },
