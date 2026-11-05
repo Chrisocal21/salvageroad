@@ -1037,6 +1037,10 @@ window.addEventListener('keydown', (e) => {
     }
   }
   if (e.code === 'KeyC') switchSeat();
+  if (e.code === 'KeyV' && mode === 'driving' && !flying && sim.flipUpright) {
+    sim.flipUpright();
+    say('Flipped the truck back onto its wheels');
+  }
   buildKeys(e);
   if (e.code === 'KeyR') {
     if (unloading) buildRot = buildRot === 0 ? 1 : 0;
@@ -1321,7 +1325,7 @@ renderer.setAnimationLoop((now) => {
         ? 'W/A/S/D walk   Shift run   E use   F eat   Q drink   Tab carrying   M map   U unload   R reset   J jump to town   G fly   B performance run   Click the page to look around, Esc to release'
         : seat === 'passenger'
         ? 'Passenger seat   C switch to driver   E get out   Tab storage   F eat   Q drink'
-        : 'W gas   S brake/reverse   A/D steer   Space handbrake   E get out   C passenger seat   U unload   F eat   Q drink   Tab storage   M map   R reset   B performance run',
+        : 'W gas   S brake/reverse   A/D steer   Space handbrake   V flip upright   E get out   C passenger seat   U unload   F eat   Q drink   Tab storage   M map   R reset   B performance run',
     );
     hud.setDebug(flying ? `${liveText}\nx ${fly.x.toFixed(0)}  z ${fly.z.toFixed(0)}  height ${fly.y.toFixed(0)} m  speed ${flySpeed.toFixed(0)} m/s` : liveText);
   }

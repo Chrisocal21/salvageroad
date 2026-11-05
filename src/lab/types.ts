@@ -23,6 +23,8 @@ export interface CarSim {
   setBuildBoxes?(boxes: BuildBox[]): void;
   /** Tells a world with rolling ground where to keep ground under the car. Optional: only the Rapier world supports it. */
   setFocus?(x: number, z: number): void;
+  /** Sets a flipped or tilted car back on its wheels, keeping its heading. Optional: only the Rapier world supports it. */
+  flipUpright?(): void;
 }
 
 // The longer cargo bed adds rear overhang. Recenter the chassis and axle positions together.

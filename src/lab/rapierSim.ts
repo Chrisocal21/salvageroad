@@ -265,6 +265,18 @@ export async function createRapierSim(spec: WorldSpec = {}): Promise<CarSim> {
     speed: () => vehicle.currentVehicleSpeed(),
     setBuildBoxes,
     setFocus: (x: number, z: number) => setFocus(x, z),
+    flipUpright: () => {
+      // Keep the heading, drop the roll and pitch, and set the car down a little above where it lies.
+      const r = body.rotation();
+      const fx = 2 * (r.x * r.z + r.w * r.y);
+      const fz = 1 - 2 * (r.x * r.x + r.y * r.y);
+      const yaw = Math.atan2(fx, fz);
+      const t = body.translation();
+      body.setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }, true);
+      body.setTranslation({ x: t.x, y: t.y + 1.2, z: t.z }, true);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    },
   };
 }
 
