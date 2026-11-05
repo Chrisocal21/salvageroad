@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGround, DETAIL_AMPLITUDE } from '../src/rules/ground';
+import { createGround, DETAIL_AMPLITUDE, ROAD_BLEND } from '../src/rules/ground';
 import { ROAD_SPEC, type RoadNetwork, type RoadPoint } from '../src/rules/roads';
 import { generateWorld, groundHeight } from '../src/rules/world';
 
@@ -8,8 +8,8 @@ import { generateWorld, groundHeight } from '../src/rules/world';
 const map = generateWorld({ seed: 1, size: 12000, cells: 256 });
 const ROAD_Z = 500;
 const ROAD_Y = groundHeight(map, 1000, ROAD_Z) + 3;
-const DECK_Y = ROAD_Y + 10;
-const HALF = ROAD_SPEC.road.width / 2; // 4.5 m
+const DECK_Y = Math.max(ROAD_Y, groundHeight(map, 0, ROAD_Z)) + 10;
+const HALF = ROAD_SPEC.road.width / 2;
 
 const points: RoadPoint[] = [];
 for (let x = -2000; x <= 2000; x += 50) {
@@ -30,18 +30,39 @@ describe('ground along roads', () => {
     expect(ground.height(-1500, ROAD_Z)).toBeCloseTo(ROAD_Y, 5);
   });
 
+  it('interpolates sloping segments exactly, including their full width between samples', () => {
+    const sloping: RoadNetwork = {
+      roads: [{ ...network.roads[0], points: [
+        { x: 1000, z: ROAD_Z, y: ROAD_Y, bridge: false },
+        { x: 1100, z: ROAD_Z, y: ROAD_Y + 6, bridge: false },
+      ] }],
+      connected: [0, 1],
+    };
+    const smooth = createGround(map, sloping);
+    for (const offset of [1.125, 23.625, 55.125, 98.875]) {
+      for (const side of [-HALF, 0, HALF]) {
+        expect(smooth.height(1000 + offset, ROAD_Z + side)).toBeCloseTo(ROAD_Y + offset * 0.06, 8);
+      }
+    }
+  });
+
+  it('supports the full bridge width between its endpoints without sample-sized gaps', () => {
+    expect(ground.surface(1.125, ROAD_Z + HALF - 0.001)).toBeCloseTo(DECK_Y, 8);
+    expect(ground.roadDistance(1001.125, ROAD_Z + HALF)).toBeCloseTo(HALF, 8);
+  });
+
   it('leaves the world untouched far from any road', () => {
     expect(ground.height(1000, ROAD_Z + 4000)).toBe(plain.height(1000, ROAD_Z + 4000));
     expect(ground.height(-4000, ROAD_Z - 3000)).toBe(plain.height(-4000, ROAD_Z - 3000));
   });
 
   it('blends back to natural ground across the margin, and is fully natural beyond it', () => {
-    const halfwayZ = ROAD_Z + HALF + 4.5;
+    const halfwayZ = ROAD_Z + HALF + ROAD_BLEND / 2;
     const naturalThere = plain.height(1000, halfwayZ);
     const halfway = ground.height(1000, halfwayZ);
     expect(Math.abs(halfway - ROAD_Y)).toBeGreaterThan(0.05);
     expect(Math.abs(halfway - naturalThere)).toBeGreaterThan(0.05);
-    const beyondZ = ROAD_Z + HALF + 9 + 2;
+    const beyondZ = ROAD_Z + HALF + ROAD_BLEND + 2;
     expect(ground.height(1000, beyondZ)).toBe(plain.height(1000, beyondZ));
   });
 

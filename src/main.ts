@@ -9,7 +9,7 @@ import { createBedView } from './render/bedLoad';
 import { createBlocks, createPartModel, createRigTire, partSize } from './render/carParts';
 import { checkFit, completeCarBuild, createCarBuild, describeMissing, fitPart, isComplete, PARTS, UNDER_HOOD, type CarBuild, type PartKind } from './rules/carParts';
 import { createProps } from './render/props';
-import { createTownView } from './render/town';
+import { batchTownScenery, createTownView } from './render/town';
 import { createHud } from './ui/hud';
 import type { Box2, Obb2 } from './rules/geometry';
 import { exitPosition, findTarget, type Target } from './rules/interaction';
@@ -21,7 +21,9 @@ import { consume, consumeSlot, createSurvival, isWeak, stepSurvival, SURVIVAL } 
 import { describeStacks, newContainerState, openContainer } from './rules/loot';
 import { summarizeFrames } from './rules/perfStats';
 import { PROP_COLLIDER } from './rules/scatter';
-import { generateTown, reachableContainers } from './rules/town';
+import { insideWorkshop, LOT, reachableContainers, settlementGrid } from './rules/town';
+import { generateSettlements, settlementPlaces as getSettlementPlaces } from './rules/settlements';
+import { generateDestinations, installDestinationGround } from './rules/destinations';
 import { lookWalker, stepWalker, WALKER, type Walker } from './rules/walker';
 import { TerrainTiles } from './render/terrainTiles';
 import { createHorizonSea, createWaterMesh, paintMap } from './render/worldView';
@@ -31,7 +33,9 @@ import { createGround } from './rules/ground';
 import { generateWorld, waterLevel, WORLD } from './rules/world';
 import { planPlaces } from './rules/places';
 import { planRoads } from './rules/roads';
+import { restoreMountains } from './rules/mountains';
 import { createMapOverlay } from './ui/mapOverlay';
+import { makeTrader } from './rules/trade';
 import { scatterWorldProps } from './rules/worldProps';
 import { SHIPPING, type ShippingKind } from './data/shippingContainers';
 import { createBaseView } from './render/baseView';
@@ -113,23 +117,39 @@ const worldMap = generateWorld({ ...WORLD, seed: SEED });
 const tPlan = performance.now();
 const plan = planPlaces(worldMap);
 const network = planRoads(worldMap, plan);
+restoreMountains(worldMap, plan, network);
 console.log(`places and roads planned in ${(performance.now() - tPlan).toFixed(0)} ms: ${plan.places.length} places, ${network.roads.length} roads`);
-const ground = createGround(worldMap, network);
+const settlementPlaces = getSettlementPlaces(worldMap, plan);
+const ground = createGround(worldMap, network, settlementPlaces);
 const { town: townSite, spawn: playerSpawn } = worldMap.settlement;
-const town = generateTown(SEED, { x: townSite.x, z: townSite.z });
-const props = scatterWorldProps(worldMap, ground, 7, propCount, 1700);
+const settlements = generateSettlements(SEED, worldMap, plan, network);
+const town = settlements[0];
+const startingTrader = makeTrader(SEED, 0, 'tools-parts');
+const destinations = generateDestinations(SEED, plan, network, settlements.reduce((n, s) => n + s.containers.length, 0), worldMap);
+installDestinationGround(ground, destinations);
+settlements.push(...destinations);
+const displayPlaces = plan.places.map(p => {
+  const site = destinations.find(s => s.placeId === p.id);
+  return site ? { ...p, x: site.center.x, z: site.center.z, height: site.groundY! } : p;
+});
+const allContainers = settlements.flatMap(s => s.containers);
+const containersById = new Map(allContainers.map(c => [c.id, c]));
+const props = scatterWorldProps(worldMap, ground, 7, propCount, 1700).filter(p => !settlementPlaces.some(s => Math.max(Math.abs(p.x - s.x), Math.abs(p.z - s.z)) < settlementGrid(s.kind, s.urban) * LOT / 2 + 15) && ![...destinations, ...(network.neighborhoods ?? []).map(n => n.town)].some(s => Math.max(Math.abs(p.x - s.center.x), Math.abs(p.z - s.center.z)) < 60));
 const terrainTiles = new TerrainTiles(worldMap, ground);
 scene.add(terrainTiles.group, createWaterMesh(worldMap), createHorizonSea(worldMap));
 scene.add(createRoadMesh(worldMap, network, ground.height));
-scene.add(createPlaceMarkers(plan.places, ground.height));
+scene.add(createPlaceMarkers(displayPlaces, ground.height));
 // Build the ground round the start in one go, so nothing pops in on the first frame.
 terrainTiles.update(new THREE.Vector3(playerSpawn.x, ground.height(playerSpawn.x, playerSpawn.z) + 2, playerSpawn.z), Infinity);
 createProps(props, ground.height).forEach((o) => scene.add(o));
-const townView = createTownView(town, townSite.height);
-townView.group.traverse(object => {
-  if (object instanceof THREE.Mesh) object.receiveShadow = true;
-});
-scene.add(townView.group);
+const townViews = settlements.map((s, i) => createTownView(s, s.groundY ?? (i === 0 ? townSite.height : settlementPlaces[i - 1].height), s.siteKind ? ground.height : undefined));
+scene.add(batchTownScenery(townViews));
+for (const townView of townViews) {
+  townView.group.traverse(object => {
+    if (object instanceof THREE.Mesh) object.receiveShadow = true;
+  });
+  scene.add(townView.group);
+}
 
 // The player's base: saved in the browser (the game's own save, not the /base/ test page's). It is built on the town's level ground.
 const buildBaseY = townSite.height;
@@ -157,8 +177,8 @@ const worldSpec = {
   ground: (x: number, z: number) => ground.surface(x, z), // what the truck drives on: roads and bridge decks included
   props,
   boxes: [
-    ...town.solids.map((b) => ({ x: b.x, z: b.z, hx: b.hx, hz: b.hz, height: b.height })),
-    ...town.containers.map((c) => ({ x: c.x, z: c.z, hx: c.hx, hz: c.hz, height: c.height })),
+    ...settlements.flatMap(s => s.solids),
+    ...allContainers,
   ],
   carSpawn: town.carSpawn,
   buildBoxes: baseBoxes(),
@@ -166,8 +186,8 @@ const worldSpec = {
 
 // Everything the player on foot cannot walk through. Props count as square for simplicity.
 const walkSolids: Box2[] = [
-  ...town.solids,
-  ...town.containers,
+  ...settlements.flatMap(s => s.solids),
+  ...allContainers,
   ...props.map((p) => {
     const c = PROP_COLLIDER[p.kind];
     const r = Math.max(c.hx, c.hz) * p.scale;
@@ -271,6 +291,7 @@ function holdPart(kind: PartKind | null) {
 
 const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
+  if (hud.isTradeOpen()) return;
   keys.add(e.code);
   if (e.code === 'Space') e.preventDefault();
 });
@@ -289,6 +310,7 @@ function readInput(): DriveInput {
 }
 
 function readWalkInput() {
+  if (hud.isTradeOpen()) return { forward: 0, right: 0, run: false };
   const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const r = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
   return { forward: f, right: r, run: keys.has('ShiftLeft') || keys.has('ShiftRight') };
@@ -342,7 +364,7 @@ hud.setConsumeHandler((index) => {
     say('That is not food or drink');
   }
 });
-const containerStates = new Map(town.containers.map((c) => [c.id, newContainerState(c.kind, c.fixedLoot)]));
+const containerStates = new Map(allContainers.map((c) => [c.id, newContainerState(c.kind, c.fixedLoot)]));
 function say(text: string) {
   hud.toast(text);
 }
@@ -443,7 +465,8 @@ const mapBase = (() => {
 const mapOverlay = createMapOverlay(document.body, {
   base: mapBase,
   worldSize: WORLD.size,
-  places: plan.places,
+  places: displayPlaces,
+  districts: network.neighborhoods?.map(n => n.town.center),
   onJump: (x, z) => {
     mapOverlay.close();
     if (flying) {
@@ -469,6 +492,7 @@ let lookPitch = DEFAULT_PITCH;
 let lastLook = 0;
 
 renderer.domElement.addEventListener('click', () => {
+  if (hud.isTradeOpen()) return;
   void renderer.domElement.requestPointerLock();
 });
 window.addEventListener('mousemove', (e) => {
@@ -569,6 +593,10 @@ function toggleCarStorage() {
 }
 
 function interact() {
+  if (hud.isTradeOpen()) {
+    hud.closeTrade();
+    return;
+  }
   if (hud.isStorageOpen()) {
     closeBed();
     return;
@@ -585,6 +613,18 @@ function interact() {
   const target = currentTarget;
   if (!target) {
     if (carrying) dropPart();
+    return;
+  }
+  if (target.kind === 'trader') {
+    if (carrying) {
+      say('Put down the part before trading');
+      return;
+    }
+    closeBed();
+    mapOverlay.close();
+    keys.clear();
+    document.exitPointerLock();
+    hud.openTrade(startingTrader, inventory);
     return;
   }
   if (target.kind === 'pickup') {
@@ -664,7 +704,7 @@ function interact() {
     say('Empty');
   }
   hud.setInventory(inventory);
-  if (!result.leftBehind) townView.markOpened(target.id);
+  if (!result.leftBehind) for (const view of townViews) view.markOpened(target.id);
 }
 
 /** Does this part go in under the hood, with the hood on and shut? */
@@ -921,11 +961,14 @@ renderer.domElement.addEventListener(
   isFlying: () => flying,
   world: () => ({ spawn: playerSpawn, town: townSite, stats: worldMap.stats, tiles: terrainTiles.built, drawn: terrainTiles.drawn, props: props.length }),
   network, // the road network, for tests and screenshots
-  places: plan.places,
+  places: displayPlaces,
   ground: ground.height,
   setFly: (x: number, y: number, z: number, yaw: number, pitch: number) => Object.assign(fly, { x, y, z, yaw, pitch }),
   truck: () => ({ x: car.body.position.x, z: car.body.position.z }),
   town,
+  startingTrader,
+  settlements,
+  settlementPlaces,
   inventory,
   bed,
   openBed,
@@ -979,6 +1022,11 @@ const bench = new Bench(
   () => `${renderer.domElement.width}x${renderer.domElement.height}`,
 );
 window.addEventListener('keydown', (e) => {
+  if (hud.isTradeOpen()) {
+    if (e.repeat) return;
+    if (e.code === 'Escape' || e.code === 'KeyE' || e.code === 'KeyI') hud.closeTrade();
+    return;
+  }
   if (e.code === 'Tab') e.preventDefault(); // Tab would otherwise move the page focus
   if (e.repeat) return;
   if (e.code === 'Tab' || e.code === 'KeyI') {
@@ -1121,10 +1169,11 @@ renderer.setAnimationLoop((now) => {
       walker.z = stepFromZ;
     }
     currentTarget = findTarget(walker, {
-      containers: reachableContainers(town, walker.x, walker.z),
+      containers: settlements.flatMap(s => reachableContainers(s, walker.x, walker.z)),
       truck: truckObb(),
       parts: looseParts.filter(onTop).map((p) => ({ id: p.id, x: p.x, z: p.z, hx: PART_REACH_BOX, hz: PART_REACH_BOX })),
       pickups: pickups.map((p) => ({ id: p.id, x: p.x, z: p.z, hx: 0.55, hz: 0.55 })),
+      traders: town.junkyard.trader && insideWorkshop(town.junkyard, walker.x, walker.z) ? [{ ...town.junkyard.trader.counter, id: 0 }] : [],
     });
     const groundY = ground.surface(walker.x, walker.z);
     camera.position.set(walker.x, groundY + WALKER.eyeHeight, walker.z);
@@ -1195,6 +1244,7 @@ renderer.setAnimationLoop((now) => {
     mapOverlay.redraw(mapX, mapZ, mapYaw);
   }
   if (hud.isStorageOpen() && (flying || (mode === 'walking' && currentTarget?.kind !== 'truck'))) closeBed();
+  if (hud.isTradeOpen() && (flying || mode !== 'walking' || currentTarget?.kind !== 'trader')) hud.closeTrade();
   hud.setMode(flying ? 'walking' : mode);
   hud.setSpeed(Math.abs(sim.speed()) * 3.6);
   if (bench.active) {
@@ -1203,7 +1253,7 @@ renderer.setAnimationLoop((now) => {
     hud.setDebug(`${liveText}\nPERFORMANCE RUN: ${bench.phaseName()}, ${bench.remaining(now).toFixed(0)} s left (B cancels)`);
   } else {
     let prompt: { key: string; text: string } | null = null;
-    if (hud.isStorageOpen()) {
+    if (hud.isStorageOpen() || hud.isTradeOpen()) {
       prompt = null;
     } else if (mode === 'walking' && currentTarget && !unloading) {
       if (currentTarget.kind === 'truck') {
@@ -1234,6 +1284,8 @@ renderer.setAnimationLoop((now) => {
                 : 'Look over the El Cajon',
           };
         }
+      } else if (currentTarget.kind === 'trader') {
+        prompt = { key: 'E', text: `Barter with ${startingTrader.name}` };
       } else if (currentTarget.kind === 'pickup') {
         const id = currentTarget.id;
         const pick = pickups.find((p) => p.id === id);
@@ -1246,7 +1298,7 @@ renderer.setAnimationLoop((now) => {
         prompt = { key: 'E', text: carrying ? `Hands full: carrying the ${PARTS[carrying].name}` : `Pick up the ${name}` };
       } else {
         const state = containerStates.get(currentTarget.id);
-        const def = CONTAINERS[town.containers[currentTarget.id].kind];
+        const def = CONTAINERS[containersById.get(currentTarget.id)!.kind];
         const shelf = def.kind === 'market_shelf' || def.kind === 'hardware_shelf';
         prompt = { key: 'E', text: state?.opened ? `Take the rest from the ${def.name}` : shelf ? 'Search the shelf' : `Open the ${def.name}` };
       }

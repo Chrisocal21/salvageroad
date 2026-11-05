@@ -3,7 +3,7 @@ import { createYardTire } from './yardTire';
 import { worldMaterial } from './worldMaterials';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { YARD, type Junkyard } from '../rules/town';
+import { workshopWalls, YARD, type Junkyard } from '../rules/town';
 import { createRustedMaterial } from './rust';
 
 // The junkyard: a rusty corrugated fence with a sign over the open gate, a dirt yard, dead cars sitting on their
@@ -76,24 +76,39 @@ export function createJunkyardView(yard: Junkyard): THREE.Group {
   });
 
   // The workshop: weathered red brick, a steel door and a sloping metal roof.
-  const shed = new THREE.Mesh(new THREE.BoxGeometry(yard.shed.hx * 2, yard.shed.height, yard.shed.hz * 2), worldMaterial('brick-2', { color: 0xe2d1bb }));
-  shed.position.set(yard.shed.x, yard.shed.height / 2, yard.shed.z);
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(yard.shed.hx * 2 + 0.4, 0.08, yard.shed.hz * 2 + 0.5), post);
-  roof.position.set(yard.shed.x, yard.shed.height + 0.12, yard.shed.z);
-  roof.rotation.x = 0.12;
-  const shedDoor = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.95, 0.9), worldMaterial('metal', { color: 0x66736b }));
-  shedDoor.position.set(yard.shed.x - yard.shed.hx - 0.02, 0.98, yard.shed.z - 0.5);
-  shed.castShadow = true;
-  group.add(shed, roof, shedDoor);
-  const doorTrim = new THREE.Mesh(new THREE.BoxGeometry(0.065, 2.08, 1.02), post);
-  doorTrim.position.copy(shedDoor.position); doorTrim.position.x += 0.035;
-  group.add(doorTrim);
-  for (const y of [0.14, 1.82]) {
-    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.055, 0.82), post);
-    brace.position.set(shedDoor.position.x - 0.03, y, shedDoor.position.z); group.add(brace);
+  const brick = worldMaterial('brick-2', { color: 0xe2d1bb });
+  for (const wall of workshopWalls(yard)) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(wall.hx * 2, wall.height, wall.hz * 2), brick);
+    mesh.position.set(wall.x, wall.height / 2, wall.z);
+    mesh.castShadow = true;
+    group.add(mesh);
   }
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.13, 0.03), post);
-  handle.position.set(shedDoor.position.x - 0.04, 1.0, shedDoor.position.z + 0.31); group.add(handle);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(yard.shed.hx * 2 + 0.4, 0.08, yard.shed.hz * 2 + 0.5), post);
+  roof.position.set(yard.shed.x, yard.shed.height + (yard.trader ? 0.04 : 0.12), yard.shed.z);
+  roof.rotation.x = yard.trader ? 0 : 0.12;
+  group.add(roof);
+  if (yard.trader) {
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(yard.shed.hx * 2, yard.shed.hz * 2),
+      new THREE.MeshStandardMaterial({ color: 0x918a7c, roughness: 1 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(yard.shed.x, 0.04, yard.shed.z);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 1.6), brick);
+    lintel.position.set(yard.shed.x - yard.shed.hx + 0.15, 2.4, yard.shed.z);
+    group.add(floor, lintel);
+  } else {
+    const shedDoor = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.95, 0.9), worldMaterial('metal', { color: 0x66736b }));
+    shedDoor.position.set(yard.shed.x - yard.shed.hx - 0.02, 0.98, yard.shed.z - 0.5);
+    group.add(shedDoor);
+    const doorTrim = new THREE.Mesh(new THREE.BoxGeometry(0.065, 2.08, 1.02), post);
+    doorTrim.position.copy(shedDoor.position); doorTrim.position.x += 0.035;
+    group.add(doorTrim);
+    for (const y of [0.14, 1.82]) {
+      const brace = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.055, 0.82), post);
+      brace.position.set(shedDoor.position.x - 0.03, y, shedDoor.position.z); group.add(brace);
+    }
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.13, 0.03), post);
+    handle.position.set(shedDoor.position.x - 0.04, 1.0, shedDoor.position.z + 0.31); group.add(handle);
+  }
 
   // Tyre piles.
   for (const t of yard.tires) {
@@ -104,6 +119,37 @@ export function createJunkyardView(yard: Junkyard): THREE.Group {
       ring.castShadow = true;
       group.add(ring);
     }
+  }
+  if (yard.trader) {
+      const { counter, person } = yard.trader;
+      const wood = new THREE.MeshStandardMaterial({ color: 0x796149, roughness: 0.9 });
+      const desk = new THREE.Mesh(new THREE.BoxGeometry(counter.hx * 2, counter.height, counter.hz * 2), wood);
+      desk.position.set(counter.x, counter.height / 2, counter.z);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(counter.hx * 2 + 0.1, 0.08, counter.hz * 2 + 0.1),
+        new THREE.MeshStandardMaterial({ color: 0x8e9995, roughness: 0.8 }));
+      top.position.set(counter.x, counter.height, counter.z);
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 0.8, 4, 8),
+        new THREE.MeshStandardMaterial({ color: 0x495b4e, roughness: 1 }));
+      body.position.set(person.x, 0.85, person.z);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0xb38b6c, roughness: 1 }));
+      head.position.set(person.x, 1.6, person.z);
+      const label = document.createElement('canvas');
+      label.width = 256; label.height = 64;
+      const ink = label.getContext('2d')!;
+      ink.fillStyle = '#292f2b'; ink.fillRect(0, 0, 256, 64);
+      ink.fillStyle = '#e0cfad'; ink.font = 'bold 28px sans-serif'; ink.textAlign = 'center';
+      ink.fillText('BARTER ONLY', 128, 42);
+      const map = new THREE.CanvasTexture(label);
+      map.colorSpace = THREE.SRGBColorSpace;
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), new THREE.MeshStandardMaterial({ map }));
+      sign.position.set(counter.x, 0.65, counter.z + counter.hz + 0.01);
+      group.add(desk, top, body, head, sign);
+      const entranceSign = sign.clone();
+      entranceSign.position.set(yard.shed.x - yard.shed.hx - 0.02, 2.4, yard.shed.z);
+      entranceSign.rotation.y = -Math.PI / 2;
+      group.add(entranceSign);
+      for (const mesh of [desk, top, body, head]) mesh.castShadow = true;
   }
   return group;
 }

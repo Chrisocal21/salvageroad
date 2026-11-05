@@ -363,7 +363,7 @@ export function createYardVehicle(index: number): THREE.Group {
     }, [0, 0, facing]);
     for (const s of [-1, 1]) {
       box(iron, [0.065, 0.075, 0.20], [s * 0.59, bumperY, facing * 2.13]);
-      if (truck || kind === 0) box(chrome, [0.045, 0.18, 0.07], [s * 0.57, bumperY, facing * 2.25], 0.02);
+      if (truck || kind === 0) box(chrome, [0.045, 0.18, 0.07], [s * 0.57, bumperY, facing * 2.235], 0.02);
     }
     if (!front) {
       const lampY = truck ? 0.66 : top(-end) - 0.14;
@@ -446,3 +446,4 @@ export function createYardVehicle(index: number): THREE.Group {
   }
   return root;
 }
+

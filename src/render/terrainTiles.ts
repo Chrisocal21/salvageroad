@@ -8,7 +8,8 @@ import { groundColourAt } from './worldView';
 // points, the same lattice the driving physics uses); further away they are bigger and coarser (4, 8, then 16 m,
 // about the world's own detail). A tile is built the first time it is wanted and kept for later.
 // If a wanted tile is not built yet, a coarser one already built stands in, so there are never holes and never
-// overlaps. Each tile has a skirt hanging down its edges so neighbours of different detail leave no cracks.
+// overlaps. All boundaries use the same 2 m lattice, including coarse tiles: no
+// T-junction cracks, overlapping skirts or detail-dependent edge lighting.
 
 const CELLS = 64;
 const ROOT = 1024; // metres: the biggest tile
@@ -34,41 +35,9 @@ interface Node {
 const keyOf = (n: Node) => `${n.size}:${n.ix}:${n.iz}`;
 const parentOf = (n: Node): Node => ({ size: n.size * 2, ix: Math.floor(n.ix / 2), iz: Math.floor(n.iz / 2) });
 
-/** Index list shared by every tile, since every tile has the same layout. */
-function sharedIndex(): THREE.BufferAttribute {
-  const stride = CELLS + 1;
-  const skirtBase = stride * stride; // skirt vertices follow the surface vertices: north, south, west, east
-  const index: number[] = [];
-  for (let r = 0; r < CELLS; r++) {
-    for (let c = 0; c < CELLS; c++) {
-      const a = r * stride + c;
-      const b = a + 1;
-      const d = a + stride;
-      const e = d + 1;
-      index.push(a, d, b, b, d, e);
-    }
-  }
-  // Each skirt strip joins an edge of the surface to its lowered copy.
-  const edge = (surface: (k: number) => number, lowBase: number) => {
-    for (let k = 0; k < CELLS; k++) {
-      const s0 = surface(k);
-      const s1 = surface(k + 1);
-      const l0 = lowBase + k;
-      const l1 = lowBase + k + 1;
-      index.push(s0, l0, s1, s1, l0, l1);
-    }
-  };
-  edge((k) => k, skirtBase); // north edge, row 0
-  edge((k) => CELLS * stride + k, skirtBase + stride); // south edge
-  edge((k) => k * stride, skirtBase + 2 * stride); // west edge
-  edge((k) => k * stride + CELLS, skirtBase + 3 * stride); // east edge
-  return new THREE.BufferAttribute(new Uint32Array(index), 1);
-}
-
 export class TerrainTiles {
   readonly group = new THREE.Group();
   private tiles = new Map<string, Tile>();
-  private index = sharedIndex();
   private material = worldMaterial('terrain', { vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
   private frame = 0;
   private color = new THREE.Color();
@@ -90,39 +59,12 @@ export class TerrainTiles {
     const x0 = ix * size;
     const z0 = iz * size;
     const stride = CELLS + 1;
-    const border = CELLS + 3; // one extra ring of heights all round, to get the slope at the edges
-    const heights = new Float32Array(border * border);
-    for (let r = -1; r <= CELLS + 1; r++) {
-      for (let c = -1; c <= CELLS + 1; c++) {
-        heights[(r + 1) * border + (c + 1)] = this.ground.height(x0 + c * cell, z0 + r * cell);
-      }
-    }
-    const surface = stride * stride;
-    const count = surface + 4 * stride;
-    const positions = new Float32Array(count * 3);
-    const normals = new Float32Array(count * 3);
-    const colours = new Float32Array(count * 3);
-    const drop = Math.max(2, cell * 1.5);
-    const put = (v: number, x: number, y: number, z: number, nx: number, ny: number, nz: number, c: THREE.Color) => {
-      positions[v * 3] = x;
-      positions[v * 3 + 1] = y;
-      positions[v * 3 + 2] = z;
-      normals[v * 3] = nx;
-      normals[v * 3 + 1] = ny;
-      normals[v * 3 + 2] = nz;
-      colours[v * 3] = c.r;
-      colours[v * 3 + 1] = c.g;
-      colours[v * 3 + 2] = c.b;
-    };
-    for (let r = 0; r <= CELLS; r++) {
-      for (let c = 0; c <= CELLS; c++) {
-        const at = (rr: number, cc: number) => heights[(rr + 1) * border + (cc + 1)];
-        const h = at(r, c);
-        const dx = at(r, c - 1) - at(r, c + 1);
-        const dz = at(r - 1, c) - at(r + 1, c);
-        const len = Math.hypot(dx, 2 * cell, dz);
-        const x = x0 + c * cell;
-        const z = z0 + r * cell;
+    const positions: number[] = [], normals: number[] = [], colours: number[] = [], indices: number[] = [];
+    const vertex = (x: number, z: number) => {
+        const h = this.ground.height(x, z);
+        const dx = this.ground.height(x - 2, z) - this.ground.height(x + 2, z);
+        const dz = this.ground.height(x, z - 2) - this.ground.height(x, z + 2);
+        const len = Math.hypot(dx, 4, dz);
         // The colour's slope is measured at the world's own grid spacing, whatever the tile's detail, so a tile
         // and its coarser neighbour agree on where the rock starts and no seams show between them.
         const sp = this.map.spacing;
@@ -131,20 +73,39 @@ export class TerrainTiles {
         const lvl = this.waterNear(x, z);
         const wet = lvl > 0.5 ? 1 - Math.min(1, Math.max(0, (h - lvl + 0.5) / 2)) : 0;
         groundColourAt(this.map, x, z, h, slope, wet, this.color);
-        const v = r * stride + c;
-        put(v, x, h, z, dx / len, (2 * cell) / len, dz / len, this.color);
-        // Skirt copies of the edge vertices, hung lower.
-        if (r === 0) put(surface + c, x, h - drop, z, dx / len, (2 * cell) / len, dz / len, this.color);
-        if (r === CELLS) put(surface + stride + c, x, h - drop, z, dx / len, (2 * cell) / len, dz / len, this.color);
-        if (c === 0) put(surface + 2 * stride + r, x, h - drop, z, dx / len, (2 * cell) / len, dz / len, this.color);
-        if (c === CELLS) put(surface + 3 * stride + r, x, h - drop, z, dx / len, (2 * cell) / len, dz / len, this.color);
+        const id = positions.length / 3;
+        positions.push(x, h, z);
+        normals.push(dx / len, 4 / len, dz / len);
+        colours.push(this.color.r, this.color.g, this.color.b);
+        return id;
+    };
+    for (let r = 0; r <= CELLS; r++) for (let c = 0; c <= CELLS; c++) vertex(x0 + c * cell, z0 + r * cell);
+    for (let r = 0; r < CELLS; r++) for (let c = 0; c < CELLS; c++) {
+      const a = r * stride + c, b = a + 1, d = a + stride, e = d + 1;
+      if (r > 0 && c > 0 && r < CELLS - 1 && c < CELLS - 1) {
+        indices.push(a, d, b, b, d, e);
+        continue;
       }
+      const perimeter: number[] = [];
+      const edge = (from: number, to: number, subdivide: boolean) => {
+        perimeter.push(from);
+        if (!subdivide) return;
+        const fx = positions[from * 3], fz = positions[from * 3 + 2];
+        const tx = positions[to * 3], tz = positions[to * 3 + 2];
+        for (let k = 1; k < cell / 2; k++) perimeter.push(vertex(fx + (tx - fx) * k * 2 / cell, fz + (tz - fz) * k * 2 / cell));
+      };
+      edge(a, d, c === 0);
+      edge(d, e, r === CELLS - 1);
+      edge(e, b, c === CELLS - 1);
+      edge(b, a, r === 0);
+      const centre = vertex(x0 + (c + 0.5) * cell, z0 + (r + 0.5) * cell);
+      for (let k = 0; k < perimeter.length; k++) indices.push(centre, perimeter[k], perimeter[(k + 1) % perimeter.length]);
     }
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
-    geometry.setIndex(this.index);
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+    geometry.setIndex(indices);
     geometry.computeBoundingSphere();
     geometry.computeBoundingBox();
     const mesh = new THREE.Mesh(geometry, this.material);

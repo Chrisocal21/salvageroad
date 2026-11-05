@@ -9,7 +9,23 @@
 
 **Overall progress:** 46% (38 of 82 items below are done). This counts items, not effort: the untouched later phases are many items of very different size.
 **Last updated:** November 4, 2026
-**Status:** Active. Playable in the browser at localhost:3000. Nothing is committed to git yet. 196 tests, 194 pass; the failures are an old comparison test for the cannon-es physics library, which the game does not use, and a work-in-progress yard vehicles tolerance test.
+
+**Sunrise workshop trader:** Moved the trader indoors into an enterable brick workshop. Shared walls/collisions, an open doorway, clear approach and repositioned toolbox preserve access and the starter wrench. Stock now specializes in existing tools and vehicle parts, with a matching HUD title. Other traders, new parts and vehicle acquisition remain outside this step.
+
+**Trader step A:** Added Sunrise's yard counter/person, E prompt and barter-only screen with item quantities, offer verdict, Haggle and Trade. Prevents movement/world actions while open; full-pack failure leaves both sides unchanged. Existing general seeded stock is reused; trader specialties and the other four settlement traders are not implemented. No saving or vehicle ownership work. Validation: 71 focused trade/HUD/gameplay/repair tests, production build/typecheck, and a live goods-for-tire browser swap pass. No commit.
+
+**Flooded blocks and salvage yards:** Neighborhood foundations and access streets now require dry full footprints, including shoreline clearance, rather than only acceptable ground height. Mid-street growth candidates preserve settlement size while avoiding water. Added three remote salvage compounds at outposts, with wrecks, fences/gates, workshops, loot and connected entrances, without duplicating Sunrise's starter progression. M-map names/markers use actual facility positions. All 25 focused tests and production build/typecheck pass; a remote yard was visually checked in the browser. Actual whole-route truck traversal and wreck-scrapping gameplay remain unfinished.
+
+**Housing/shopping reference follow-through:** Recorded the latest 18 images in the decision log. Replaced the shared micro-grid template with six-home garden-backed residential blocks and four-unit shopping centers with common promenades, marked parking and clear drive aisles; apartment blocks remain a separate higher-density type. Added residential lawns, paths, short driveways, trees with trunk collisions, and local-district sidewalks. Preserved connected, terrain-fitting streets and individually reachable shop loot. All 24 focused neighborhood/settlement/destination/earthworks/batching tests and production build/typecheck pass; aerial browser checks cover both new layouts. Curved/longer residential tracts, larger malls and full downtown/reference scenery parity remain unfinished. Overall completion remains unchanged.
+
+**Layout correction (Nov 4, 17:23):** Replaced individually attached residential lots with two-by-two local-street blocks containing at least three buildings, prioritizing neighborhood growth over additional arterial spurs. Houses face local streets. Added graded block access and larger pad separation from core floors. Roadside facilities now clear through-roads and use explicit connected entrances/courts; access surfaces and rendering agree. Default-seed Fenwick/Port Alder retain 103/107 buildings. All 36 focused layout/road/loot/render tests and production build/typecheck pass. No home/upstairs interior completion is implied.
+
+**Scenery/city pass (Nov 4, 16:47):** Recorded all 32 scenery references in the decision log. Fenwick in the pictured northern coastal region now has a five-by-five urban block layout, taller multi-storey buildings, textured facades, sidewalks and lootable ground-floor stores. The existing city gets the same skyline treatment. Street routing, terrain pads, mountain clearance and collision/loot integration share the expanded footprint. Facades are material-batched. Upper floors remain decorative; larger city districts and the full reference scenery set are not complete. Reused the supplied pack's already-imported runtime textures. Validation: 27 focused tests and production build/typecheck pass.
+
+**Coastal network follow-through (Nov 4, 16:30):** The default seed now has 18 roads instead of 12, including six junction-to-junction loops adding 7.90 km. Seeds 2/3/7/42 have 21/25/25/22 roads, adding 14.16/24.60/20.05/17.63 km. Water-adjacent dry anchors are prioritized; this is not a guaranteed complete ocean ring or a ring around every lake. New roads are rejected for self-overlap, incompatible junction elevations, excessive shoulder earthworks or actual blended-surface crossfall. Search is bounded to 120 candidate route pairs, distributed across anchors rather than exhausted on one site. All 21 focused roads, earthworks/driving-smoke, destination and terrain-stitching tests pass; production build/typecheck pass. Terrain seams were visually checked in isolated near/far terrain scenes; continuous whole-network driving and every facility approach remain unverified. Facilities include freight depots, a military logistics compound and shipping docks with loot and collisions. No build-mode progress is implied.
+**Status:** Active. Playable in the browser at localhost:3000. 207 tests, 205 pass; the failures are an old comparison test for the cannon-es physics library, which the game does not use, and a work-in-progress yard vehicles tolerance test.
+
+**Latest review (Nov 4, about 15:00):** Chris's ten screenshots show that connected roads are not yet believable roads: mountain trenches/ledges, the Sunrise loop and unexplained ends remain. Other settlements are still markers, and U cargo unloading is not the requested general in-game build mode. Detailed screenshot notes and acceptance checks are in the latest entry of [DECISIONS_LOG.md](../DECISIONS_LOG.md). This review records unfinished work; it does not increase progress.
 
 ---
 
@@ -96,7 +112,7 @@
 **Goal:** the game as Chris described it later: rebuild the truck, find containers, haul them to a compound, a big world to travel.
 
 #### Base and containers
-- [x] Shipping container base builder prototype at /base/ (snap grid, stacking, support rule, pillars, build menu)
+- [x] Shipping container base builder prototype at /base/ (snap grid, stacking, support rule, pillars, build menu); the requested discoverable main-game build mode is still pending
 - [x] Real container model with level of detail
 - [x] Put containers down from the truck in first person (U): ghost, snapping, support rules, pick back up
 - [ ] Containers lying in the world to haul away (one stands in the junkyard; the docks and other sites are still to come)
@@ -107,8 +123,8 @@
 - [x] 12 km island generator: land, rivers, lakes, ocean, desert (viewer at /world/)
 - [x] One game: wake in the desert, town hidden behind a dune, fly mode (G), quick jump to town (J)
 - [x] Detailed ground you can walk and drive on (tiles that get finer near you)
-- [x] Plan of places and two docks for any island (src/rules/places.ts; a plan only, nothing drawn)
-- [x] Roads, highways, dirt roads, trails and bridges: the network is planned for any island, drawn in the /world/ viewer, and levelled into the game world — drivable roads and bridge decks, props kept clear (src/rules/roads.ts, src/rules/ground.ts)
+- [x] Plan of places and two docks for any island (src/rules/places.ts; map labels and world markers exist, but other settlements are not built)
+- [x] One continuous main-road connection through the planned towns, villages, city, industrial yard and docks, with single-join access roads and bridge support (src/rules/roads.ts, src/rules/ground.ts); routing, earthworks and road presentation still need the latest visual-review work
 - [x] Map screen (M) and minimap: every place named, roads and bridges drawn, player arrow, click-to-travel for testing; HUD hotbar and click-to-use inventory (src/ui/mapOverlay.ts, src/ui/hud.ts)
 - [ ] The other towns, the city, the docks and the industrial yard built in the world
 - [ ] Trees, shrubs and ground textures from Chris's asset folders
@@ -194,19 +210,27 @@
 | Nov 4, 2026 | The El Cajon becomes a stripped rusty shell in a junkyard, rebuilt from 18 loose pieces with a wrench. Doors, hood, tailgate, seats, bed storage that shows its load, the big rig tyre. One container in the yard. Plan of places and two docks. Tracker rewritten to match | 44% |
 | Nov 4, 2026 | Road network built: highways, roads, dirt roads and trails join every place, with bridges over water. Drawn in the /world/ viewer and the plan map tool; not levelled into the game world yet | 46% |
 | Nov 4, 2026 | Everything on one map: roads levelled into the game world and drivable, bridge decks carry the walker and the truck, place markers, map screen (M) with click-to-travel, minimap, HUD hotbar and clickable inventory | 46% |
+| Nov 4, 2026 | Road correction: one continuous town-to-town route replaces branching highways and duplicate corridors; access roads join once, street heights stay fixed, and pavement follows exact ground support | 46% |
+| Nov 4, 2026 | Ten-screenshot review recorded: believable road routing/earthworks and Sunrise approaches, actual visible settlements, and discoverable build mode in the main game are the next priorities; no implementation claimed by this intake | 46% |
 
 ---
 
 ## What to Tackle Next
 
-- [x] Roads: one style, smooth, meeting the starting town's streets and each other in T junctions (2026-11-04)
+- [ ] Correct the reviewed road sections: giant mountain trenches and ledges, abrupt terrain transitions, and the unnatural Sunrise loop; keep one main town-to-town road
+- [ ] Make roads read as roads: shoulders, appropriate markings, coherent junctions and deliberate destination entrances/ends; verify all ten reference views
+- [ ] Build actual visible cities, towns and villages with streets connected to the shared road network; markers and map names do not satisfy this
+- [ ] Integrate discoverable build mode and a supported-piece catalogue into the main game, reusing placement/support/collision/save rules without requiring /base/ or a cargo testing URL
+- [x] Road connectivity implemented: one main route, street-height anchors and single-join access roads (2026-11-04); this does not close the visual road work above
 - [x] Smooth coast and river edges, stable with the camera (2026-11-04)
 - [ ] Haul a container onto the truck (the yard container, then the docks)
 - [ ] Lane markings and proper junction shapes
-- [ ] Streets for the other places, opening onto their road gates
+- [x] City/town/village streets opening onto real road gates, visible scaled settlements and lootable stores (2026-11-04; seed 1 browser smoke check, seeds 1/7/42 integration tests)
+- [ ] Physical layouts and entrances for docks, industrial yard, outposts and lookouts
 - [ ] River bank colour still blocky at long range
 - [ ] Decide: a viaduct rim-to-rim rule for gorges, or keep the deep-cut roads as they are (see DECISIONS_LOG.md)
-- [ ] Draw the places in the world: the other towns, the city, the docks, the industrial yard
+- [x] Draw the other towns, city and villages; reuse inventory, store entrances and walking/vehicle collisions without duplicating Sunrise's yard
+- [ ] Draw the docks and industrial yard; full-route driving and settlement streaming/performance validation
 - [ ] Trees, shrubs and ground textures from the asset folders (licences to check first)
 - [ ] Confirm how many shipping containers there should be across the map (Claude recommends about 150)
 - [ ] Decide: should parts be found outside the junkyard, and does the truck need fuel
@@ -216,6 +240,23 @@
 
 ## Build Rules
 
+### Road-end facilities and terrain boundaries (2026-11-04)
+
+- Main-game nonresidential destinations now use enterable metal freight warehouses, a three-building military logistics compound with perimeter barriers and a tower, and shipping quays with two warehouses, stacked cargo, a clear central freight lane and a gantry. The same town-wall, loot, opened-container and walking/driving collision paths handle these facilities; loot IDs follow residential container IDs. No additional build-mode features.
+- Facilities attach to the nearest dry road sample, including interior main-road samples rather than only road endpoints. Residential layouts remain unchanged. Courts use terrain-conforming pavement, foundations are spatially indexed, and foundation grading explicitly excludes the validated 23 m road/shoulder footprint.
+- Removed terrain skirts and triangulated every tile boundary on the same 2 m lattice. Near and far tiles now share exact edge positions, colours and fixed-spacing normals; this addresses real LOD geometry/lighting discontinuities rather than hiding a supposed grid overlay.
+- Verification: four focused facility/boundary tests and production typecheck/build pass. Tests cover unique loot IDs, enterable door gaps, clear turning courts, distinct military/dock layouts, quay driving support without filling sea terrain, preserved road formations, and matching 128/256/512 m edges against a 1024 m tile.
+- Browser inspection used the actual facility renderer in an isolated dock/military scene, plus the actual tiled renderer at two camera heights (282 and 288 visible tiles). No dotted tile boundaries appeared in that terrain scene. This is not a claim of completed seed-by-seed main-game POI driving: the concurrent expanded network planner was still computing during this verification. Main-game approach grades, dock deck/land transitions, and facility foundations on unusually steep terrain still require whole-world checks.
+
+### Latest road verification (2026-11-04; supersedes the percentage-only follow-up below)
+
+- Implemented hard 6 m formation cut/fill constraints, dry-link grade rejection, full-width construction validation, sloping bridge decks with dry abutments, continuous junction ground and 18 m shoulder blending.
+- Coupled terrain redesign is deliberate: old knife-edge mountains are replaced by lower broad highlands using a pre-drainage 6% neighbour-slope erosion envelope. This is **not** a claim to have retained the old mountain silhouettes or implemented tunnels. River carving and water stamps are corrected too.
+- Seeds 1/2/3/7/42: every place connected, one continuous main road plus six outpost/five lookout branches. Actual construction/shoulder maximum differences: 3.856223365348974 / 3.824549007225677 / 4.900919569457477 / 3.464331917968309 / 5.604457495925743 m; maximum crossfalls: 5.033557257788886 / 5.85906391112232 / 5.732162439366206 / 7.264487995114166 / 5.687052629566267%. All generated classes covered.
+- 53 focused tests and production build/typecheck pass, including explicit failure on an impassable artificial ridge. Browser highland inspection and five short Rapier driving samples completed. Full-network driving, detailed scenery/performance review, dramatic mountain restoration/tunnels and Sunrise exit redesign remain unfinished. See DECISIONS_LOG.md for methods and exact cut/fill extrema.
+
 - No HTML in any output
 - No emojis in any output
 - SVG icons only when genuinely needed
+- 2026-11-04 settlement expansion: connected local neighbourhoods now materially enlarge city/town/village footprints without enlarging the fixed-height core pads. Default-seed Fenwick grows from 20 to 101 buildings over a 1,317 × 800 m street envelope; Port Alder has 107, the two non-urban towns 31–41, and villages 15–17. Separate apartment, business-under-apartment and pitched-roof home streets share terrain/collision/loot IDs, map footprint and mountain-reservation data. Northern business door entry and shelf-to-inventory transfer are browser-verified. Upstairs/homes are exterior-only; planning cost and on-foot render budget still need further optimisation. See the latest decision-log entry for exact counts and honest envelope/performance limits.
+- 2026-11-04 road follow-up: terrain-aware waypoint cleanup/rounding and bounded fitted access-road selection are implemented. Seeds 1/7/42 show 10–16% lower RMS earthworks, with regression checks and three isolated Rapier driving samples. Full-route driving, Sunrise's outside loop, deep mountain trenches/fills and local crossfall corrections remain **unchecked/incomplete**; see the numeric results and limitations in DECISIONS_LOG.md.

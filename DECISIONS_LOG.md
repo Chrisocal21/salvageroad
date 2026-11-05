@@ -1,8 +1,71 @@
 # Decisions Log
 
+## Sunrise trader: tools/parts and brick workshop
+
+Chris specified that the starting trader sells tools and vehicle parts and asked to move him into the existing brick building shown in four screenshots.
+
+- Moved the counter/person into the yard's brick workshop. Replaced its solid blocking box with shared rendered/collision walls and an open west-facing doorway. Barter prompts require the player to be inside, so the trader cannot be used through the outside walls.
+- Decisions: enlarge this workshop to 6 by 5.2 m to fit the counter, trader and a customer route; use an enclosed flat roof and a permanently open entry for this step. Keep the existing exterior brick material, add no imported assets, and leave remote sheds unchanged.
+- Moved the starter toolbox beside, rather than across, the entrance. Reserved the approach against loose repair parts. Its guaranteed wrench remains free and lootable outside; outside loot is not reachable through the shop walls.
+- The new tools/parts stock profile guarantees existing item types only: wrenches, El Cajon tires, a motor and a big-rig tire. No new tool/part types were invented. Other trader profiles remain unchanged, and barter can still accept any valued goods from the player.
+- Added a barter sign above the doorway and a tools/vehicle-parts HUD heading. Corrected the counter renderer being repeated once per tire pile; it now renders once.
+
+Validation: 76 focused tests and production build/typecheck pass. Tests cover seeded stock, walking in to the counter and back out across three seeds, collisions, barter and original repair progression. In the browser, walked through the doorway and opened the tools/parts stock with E. No commit.
+
+## Starting-yard trader: step A
+
+Chris requested one step at a time: start with a trader and barter screen at Sunrise, then stop. The supplied takeover notes describe an older marker-only world; preserve the already-built settlements, roads and remote yards rather than rebuilding or removing them.
+
+Implemented:
+- A procedural counter/person inside Sunrise's salvage yard, left of the gate. The counter and person are solid; loose repair parts reserve their space and the gate remains clear.
+- E opens the existing seeded trader's goods and the player's pack. Quantity controls build an offer/request; the screen shows barter values, the verdict, remaining haggles, Haggle and Trade. No currency.
+- Movement and game hotkeys are blocked while trading; pointer lock is released, keyboard focus stays in the panel, and Close/E/Esc exit. The barter panel is above the minimap so its controls remain clickable.
+- Successful swaps refresh stock and the hotbar. Full-pack failures preserve exact inventory slots and stock. Duplicate offer rows are checked as totals; invalid quantities are refused.
+
+Decisions not specified by Chris:
+- Reuse `makeTrader(seed, 0)` and its current general stock/name. Do not invent specialties or extra vehicle parts before asking about them.
+- Follow the existing haggle result: the final successful push may still lead to a trade; pushing again after patience runs out causes refusal. Refusal, margins and stock persist across closing/reopening during the current run, but are not saved on reload.
+- Use only newly drawn primitive geometry, flat materials and a procedural sign for this trader. Do not import more assets from Chris's folders while licenses are unresolved; existing scenery assets were not changed.
+- Keep the requested remaining town traders/yard vehicles, vehicle ownership/drivability, saving, lane markings and container loading out of step A. No commit.
+
+Validation: 71 focused barter/HUD/gameplay/repair tests and production build/typecheck pass. Live browser checks opened the yard trader with E, completed a goods-for-tire swap after haggling, confirmed movement stays blocked, and closed using the clickable button. Temporary test goods and trader changes were restored; the player pack remains empty. Existing large-bundle warning remains.
+
+## Flooded neighborhood screenshot and missing salvage yards
+
+Chris spotted a shopping center/local streets in river or lake water and asked where the other salvage yards were.
+
+- Root cause: neighborhood safety checked bed elevation/roughness, not water occupancy. An elevated inland lake or river bed could pass those height checks. Flat foundations did not remove the independently rendered water.
+- Added a shared dry-footprint test covering all intersecting hydrology cells, not just a center point. Neighborhoods now reject wet full footprints and wet access corridors, with a three-cell setback for the water renderer's shoreline apron. Land-side destinations use the same test. Quays remain intentional water decks; existing main-road bridges are unchanged.
+- Added street-midpoint growth candidates so cities can keep growing on dry land rather than accepting flooded blocks or shrinking population/developed-area requirements.
+- Only Sunrise previously had a real salvage yard; the other facilities were freight depots, logistics, lookouts and docks. Three of the six outposts now become distinct salvage destinations, leaving the other depot types intact.
+- Remote yards reuse the salvage scenery: five wrecks, fenced compound and open gate, workshop, tire piles, an additional roadside warehouse and ordinary loot containers. Rotated rendering and collision bounds share the same transform; their gates face the connected access lane. They do not spawn another starter car, starter repair parts, guaranteed starter wrench, or haulable cargo.
+- Default-seed map names: Hermit Farm Salvage Yard, Ranger Hut Salvage Yard and Orchard Barn Salvage Yard. Main-game map labels and physical markers now use actual destination positions instead of the old planning anchor. Press M to locate/travel to them while testing.
+
+Validation: 25 focused tests and production build/typecheck pass. Tests cover a wet footprint corner with a dry center, dry neighborhood/access placement across five seeds, preserved settlement scale, three remote yards across three seeds, unique loot, clear gates and existing road/terrain/loot regressions. Browser inspection confirms a rendered remote yard, its connected entrance and matching map position. Full truck travel to every yard and wreck-scrapping interactions remain unverified/not implemented respectively. Existing large-bundle warning remains.
+
+## Housing and shopping references: intake and first layout pass
+
+Chris supplied 18 further references: "heres examplers of housing and shopping centers this is how the map should flow and see within the areas of population".
+
+- Images 1-5: substantial residential neighborhoods; connected collectors/local streets, curved routes and occasional loops; consistent street-facing homes, setbacks, driveways, sidewalks, back gardens and mature trees. These are grouped residential areas, not isolated houses beside a highway.
+- Image 6: the current game's uniform small-box/grid layout is the comparison to improve, not the finished target.
+- Images 7-12: shopping centers with adjoining shop bays, shared storefront promenades/awnings, parking rows, drive aisles, collector-road entrances, anchors and landscape islands.
+- Images 13-18: denser urban commercial streets, ground-floor businesses beneath apartments/offices, varied skyline, pedestrian crossings, plazas and planted streets. The nighttime reference establishes visual character; it does not by itself request a day/night system.
+- Use the planning principles, not real brands, watermarks or copied building designs. Previously supplied local scenery assets remain the texture source.
+
+Implemented on the main world:
+- Separate residential, shopping and apartment district layouts. Non-starting settlements get a shopping center first; larger cities alternate additional centers, apartment blocks and housing. Sunrise's starting junkyard layout is preserved.
+- Residential blocks have two outward-facing rows of three homes. Removed the unnecessary central cross streets; the space behind houses is a garden strip instead of asphalt. Added front lawns, footpaths, short driveways and eight small trees per residential block, with trunk collision.
+- Shopping centers have four close adjoining, individually enterable/lootable units, one frontage promenade and a shared marked parking court with an unobstructed drive aisle. Internal cross streets no longer cut through the shops/parking. Every store retains its own interior lookup and globally unique loot IDs.
+- Added sidewalks to local districts, not only the large urban core. Terrain-fitting foundations, local-first growth, arterial entrance caps and shared road/ground rules remain in effect. Corrected repeated insertion of the same growth candidates while assembling a block's outgoing streets.
+
+Validation: 24 focused neighborhood, settlement, destination, earthworks/driving-smoke and batching tests pass, as does production build/typecheck. Five-seed checks retain street connectivity, road clearance, actual developed-area/population requirements, level floors and shop entry/loot. Browser aerial checks show the shared shopping court and garden-backed housing rows. Existing large-bundle warning remains.
+
+Still pending from the references: longer/curved residential tracts, parcel fences, larger anchor malls and landscaped parking islands, continuous downtown street walls/plazas and further architectural variety. This is a first layout pass, not photographic scenery parity. Home/upstairs interiors, general build mode and continuous whole-network vehicle driving are not completed by this change.
+
 Anything decided that Chris did not specify, library comparison results, and open questions. Newest at the bottom.
 
-## Current state at a glance (updated 2026-11-04, after the one-map merge and HUD work)
+## Current state at a glance (updated 2026-11-04, after Chris's ten-screenshot world review)
 
 This is a summary so you do not have to read the whole history. The dated entries below stay as they were written; where a later entry changed an earlier one, the later one wins.
 
@@ -13,9 +76,11 @@ What the game is now (localhost:3000; /base/ is the container builder sandbox, /
 - The truck: driver's door to drive, passenger door to ride, hood opens, bed storage (24 slots) shows what is in it. src/rules/vehicleZones.ts, vehicleStorage.ts, bedLoad.ts.
 - Keys: W/A/S/D move or drive, Shift run, E use, F eat, Q drink, Tab or I inventory (in the truck: pack plus vehicle storage), C switch seat, U unload containers, R reset (or rotate while placing), J jump to the town, G fly mode (T lands), B performance run, M map (click it to travel there, for testing), N and [ ] reseed the world, H is gone. URL options: ?fixed=1 starts with the truck whole, ?cargo=ft20,ft40 puts containers on the truck, ?objects=N sets the prop count.
 - The plan of places (src/rules/places.ts): starting town, 1 city, 3 more towns, 4 villages, 1 industrial yard, 6 outposts, 5 lookouts and 2 docks. In the game each place is a pole with a coloured lamp for now; the buildings are still to come. tools/place-map.ts draws the plan as a picture.
-- The road network (src/rules/roads.ts): highways, roads, dirt roads and trails join every place, with bridges over water. The game levels the ground along the roads and the decks carry the walker and the truck (src/rules/ground.ts). Also drawn in the /world/ viewer.
+- The road network (src/rules/roads.ts): one continuous main road visits the city, every town and village, the industrial yard and both docks. Outposts and lookouts have single-join access roads. No extra highway loops or overlapping duplicate corridors. The game levels the ground along the roads and the decks carry the walker and the truck (src/rules/ground.ts). Also drawn in the /world/ viewer.
 - A minimap sits top right; M opens the big map with every place named, the roads, bridges in red, a scale bar and a player arrow (src/ui/mapOverlay.ts). The HUD has an always-visible hotbar and a click-to-use inventory (src/ui/hud.ts).
-- Tests: 196, two failing (the old cannon-es ramp comparison, which the game does not use, and a work-in-progress yard vehicles tolerance test).
+- Tests: 207, two failing (the old cannon-es ramp comparison, which the game does not use, and a work-in-progress yard vehicles tolerance test).
+
+Current priority from Chris's latest review: the connected road is not visually finished. Deep mountain trenches, abrupt embankments, awkward town approaches and unexplained road endings still need work. Other settlements are markers, not built cities or towns. The main game's U action only unloads existing truck cargo; it is not the requested accessible build mode. The detailed intake and acceptance checklist are at the end of this log. These requests are recorded, not implemented by this documentation pass.
 
 Not saved on reload: the truck rebuild, the inventory, the loot, the bed contents. Only the base (placed containers) is saved, in the browser, under its own key.
 
@@ -539,3 +604,195 @@ Chris saw the coast change as he moved the mouse, roads that followed the grid a
 - Every road is now 10 m wide and one grey, whatever its class. Grade limits and routing costs still differ by class, because a single 8 percent limit left lookout trails running level while the mountain rose 200 m beside them (tall earth walls); that was tried and undone.
 - A road that meets another now ends on the other road's centreline (a T), within 16 m, with its height eased over the last 30 points. Two roads at different heights are an overpass, not a junction. The grade test skips the first and last 32 points of a road, where a junction landing eases in.
 - Still seen: two separate roads can run side by side more than 16 m apart on a hairpin, and no lane markings or turn lanes.
+
+## 2026-11-04 One continuous road connects the towns (Chris)
+
+Chris said there should only be one road connecting all the towns, and showed the split, braided corridors and floating pavement.
+- The main road is now one continuous polyline, visiting the city, towns, villages, industrial yard and docks once each. An open itinerary replaces the branching highway tree and its extra loops. It keeps the existing 10 m grey style and uses the paved road's 8 percent grade limit.
+- Later main-road sections avoid the corridor already built instead of receiving a discount for following it. Arrival and departure use opposing gates where possible, so the route goes through a settlement rather than doubling back out of the same entrance.
+- Outposts and lookouts keep their access roads. Each ends at its first junction on the existing network; no second tail or parallel shared stretch is drawn. Junction heights are pinned while the whole approach profile is fitted, keeping the grade limit and flat bridge decks. An infeasible landing tries another nearby junction; an unrouteable connection reports an error instead of returning an incomplete network.
+- Sunrise uses its existing street grid, with the road height pinned to the town's fixed street level. It does not excavate the town or cut across building lots.
+- Ground support uses exact projections onto road segments, not nearest height samples, removing the steps between samples. The pavement samples the ground at both edges instead of floating above it at an independent planned height. Bridge support covers the full deck width between points.
+- Seed 1: one main road of about 38 km visits all 12 main places; 11 access roads connect the remaining outposts and lookouts. All 23 places remain reachable.
+- Checked: nine new regression tests, with main-road topology, no nearby duplicate stretches, physical access-road junctions, town street alignment, junction grades and flat bridge decks checked across seeds 1, 2, 3, 7 and 42. The 68 focused tests pass; the full suite is 205 passing out of 207 with the same two pre-existing failures. Typecheck and production build pass. Inspected the map, the town approach and the ground-level pavement in the game.
+
+## 2026-11-04 Screenshot intake: real roads, visible settlements and build mode in the game (Chris, about 15:00)
+
+Chris asked: "make these sections better and make more sense make them look like real roads. i dont see any other city or town either." He also asked to add build mode into the game, and to take in all ten pictures and write the notes in the Markdown files.
+
+This is a requirements and visual-defect intake, not a completion report. The earlier successful connectivity and grade tests do not establish that the roads look believable or that settlements and build mode exist.
+
+### What the ten pictures show
+
+Numbers follow the order of the ten pictures attached to this request. Coordinates below are approximate HUD camera positions, not surveyed road elevations. Descriptions are retained here so the notes do not depend on temporary attachment paths.
+
+| Picture | Observation | Work to carry forward |
+|---|---|---|
+| 1 | At about X -2156, Z 30, the asphalt sits inside a conspicuous straight-sided desert cutting. There are no visible shoulders, edge markings or drainage transitions. | Make the road cross-section believable: proportionate earthworks, shoulders and gradual transitions to surrounding terrain. Check from driving height, not only from above. |
+| 2 | Above Sunrise, the main road makes a broad, roughly triangular loop around the small block of buildings, with a tight corner and abrupt joins against the lighter town streets. | Rework the town approach and departure as actual streets and junctions. Preserve building access and the junkyard; do not force a loop simply to satisfy an opposing-gate rule. |
+| 3 | At about X -87, Z 942, a long mountain road or access road appears to stop as a bare asphalt end on the slope. | Identify the intended destination. If it is a lookout, provide a recognizable destination and deliberate termination; otherwise investigate missing or terrain-hidden road geometry. A map dot is not an adequate destination. |
+| 4 | At about X 493, Z 786, the road is at the bottom of a very deep, narrow cut with almost vertical mountain walls. | Treat these giant trenches as a routing/height-profile defect, not as finished earthworks. Prefer a route that follows the land, with believable cuts and fills. |
+| 5 | The overhead mountain view shows a long, ruler-straight slice through a ridge, ending in an abrupt change of ground shape. | Revisit the horizontal alignment as well as the vertical profile. Smoothing a ribbon alone cannot make this excavation plausible. |
+| 6 | The hillside road has a tall, sharply edged fill on its downhill side and a severe cut on the uphill side. The road reads as a strip pasted into a mountain. | Give the road a supported, believable cross-section; use graded slopes or deliberately modeled structures rather than unexplained terrain walls. |
+| 7 | The closer view of the same kind of hillside section exposes the narrow ledge, abrupt crest and lack of readable road edges or roadside protection. | Inspect crest/sag transitions, sight lines and the supported edges at ground level. Roadside treatment must suit an exposed mountain section. |
+| 8 | From above the ridge, the road appears to disappear behind or into terrain while very tall cuts continue through the mountain. | Check both route geometry and terrain-detail transitions. Determine whether the surface is occluded or genuinely interrupted; verify physical continuity as well as what is visible. |
+| 9 | The wide valley view shows several bare road ends or spurs around hills and lakes, without visible settlements explaining them. | Trace each end to a real destination, distinguish intentional access roads from defects, and make junctions and destination entrances readable in the world. |
+| 10 | At about X -1234, Z 924, the broad island view still looks largely empty: roads and apparent ends are visible, but no other recognizable city or town. | Build actual settlements on the existing place plan. A named marker on the map or a lamp pole does not count as a city or town. |
+
+Visual uncertainty to preserve: a road that looks cut off in a still image may be a legitimate lookout spur, terrain occlusion, or a rendering/detail problem. Do not claim a specific cause without checking that location in the running game.
+
+### Requested outcomes
+
+Roads:
+- Keep the requested single continuous main road connecting the towns. Do not reintroduce duplicate parallel corridors or an arbitrary extra highway network.
+- Make routing and earthworks believable together: roads should work with slopes and valleys rather than carving tall narrow canyons through every obstacle.
+- Rework the Sunrise loop, tight turns, street joins and approach directions as a coherent settlement road layout.
+- Give intentional road ends recognizable destinations, and fix any actual breaks or hidden sections.
+- Add the road presentation needed to read as real roads: shoulders, appropriate markings, edge transitions and proper junction shapes. Specific dimensions and art treatment are not yet agreed.
+- Proposed engineering options, not decisions already approved: contour-following reroutes, properly spaced switchbacks, graded cut/fill slopes, retaining structures and bridges/viaducts where justified. Tunnels are not implicitly approved. The earlier question about rim-to-rim viaducts remains open.
+- Do not "fix" the visual failures by only raising the tests' allowed road-to-ground height differences.
+
+Visible places:
+- The city, other towns and villages must become actual places with visible buildings, local streets and usable entrances connected to the main road.
+- Their size and arrangement should communicate city versus town versus village, rather than duplicating Sunrise identically everywhere.
+- The docks and industrial yard also need recognizable physical layouts; outposts and lookouts need an identifiable reason for their access roads.
+- Reuse the existing seeded place plan and shared world. Markers may remain useful debugging aids but are not the finished implementation.
+- Roads, terrain levelling, buildings, collision and map labels must agree about the same locations. Keep the existing Sunrise gameplay intact.
+
+Build mode:
+- Provide a discoverable build-mode entry and usable build interface in the main game at /, on the same map used for walking, driving and testing.
+- Current verified distinction: /base/ has the builder catalogue and controls; / has cargo unloading on U, with a placement ghost, snapping, levels, support checks, collision updates and base saving. U requires existing truck cargo, normally supplied through the testing URL today. This is not a general in-game build mode.
+- Reuse the existing building rules and renderer rather than creating a disconnected second system or requiring a visit to /base/.
+- Expose supported-piece selection, placement preview, rotation, snapping, stacking/height, removal, clear invalid-placement feedback and an obvious exit. Preserve support rules, collision and the game's own base save.
+- Testing access should not depend on manually supplying a cargo query string. A testing catalogue and normal survival/container-hauling rules must remain distinguishable.
+- Do not silently reverse the earlier design that shipping containers are found and hauled, rather than freely crafted from a menu. The exact survival build catalogue, resource costs and unlocks remain unspecified.
+- Pick controls deliberately: B already starts the performance run; U unloads cargo; R, the map and inventory already have contextual actions. Do not assign a conflicting shortcut without updating the full control flow and help.
+- This request does not mean floors, walls, stairs and other still-unbuilt pieces are already available.
+
+### Working order and acceptance checks
+
+Proposed execution order: correct the route/earthwork failures and Sunrise transition; build visible connected settlements; integrate the in-game build-mode entry and catalogue. These are three unfinished deliverables, not another completed "one map" claim.
+
+- [ ] Revisit the ten reference views, especially the desert cutting, Sunrise loop and mountain trench/ledge sections. Compare before and after at walking/driving height and from the air.
+- [ ] Verify grades, bends and cut/fill depths against explicit agreed limits. Report measured extremes; numeric cut/fill and cross-section targets still need to be established during implementation.
+- [ ] Check the full visible and drivable route, including intersections, bridges, exposed hillsides, intentional ends and changes in terrain detail. Connectivity metadata alone is not sufficient.
+- [ ] Visit the city and each other town/village in the main game and find actual buildings, streets and connected entrances, not only markers or labels.
+- [ ] Enter build mode from a normal main-game session, select a supported piece, rotate/place/stack/remove it, see invalid-placement reasons, exit cleanly, and verify collision and reload persistence.
+- [ ] Keep performance within the existing project baseline as settlement geometry is added; check draw calls and terrain streaming instead of drawing an unbounded detailed world at once.
+- [ ] Update the tracker only after the requested behavior is implemented and visually checked. This intake alone completes none of these features.
+
+## 2026-11-04: Drive-to-loot settlements implementation
+
+- The main game now renders every planned city/town/village using the existing seeded town/store renderer and inventory interactions. City: 5-by-5 lots; town: 3-by-3; village: 2-by-2. Each has a market, enterable shops, outdoor containers and shared walking/vehicle collision. Sunrise alone retains its junkyard, rebuild parts and shipping container.
+- Residential road gates now coincide with actual grid streets. Internal main-road links follow street centrelines; corners inside settlements stay square. New settlement pad elevations are fitted to the feasible road profile, recorded in the shared place plan, then pinned through the streets. Ground, rendered buildings and physics use those levels; shop floors remain level even beside approach ramps.
+- Container IDs are global across settlements. Store/building IDs stay local, so shelf reachability is checked against the owning settlement rather than treating IDs as global building indices. Opening shelves updates the corresponding renderer and existing inventory/loot state.
+- Validation: 68 focused tests passed (settlements, gameplay, roads, ground, road rendering, terrain physics); standalone typecheck and production build passed. Build retains the existing large-chunk warning. New integration tests cover seeds 1/7/42: road clearance, aligned gates, level building footprints, entering every store through its door, unique containers, store-only reachability and loot transfers.
+- Browser smoke check: seed 1 city inspected from above; all eight non-Sunrise residential places visited through the debug walker position, targeting a market shelf and transferring loot to inventory. This was not a continuous full-route driving run or an exhaustive visual/performance review.
+- Remaining: distinct architecture beyond lot-count scales, docks/industrial/outpost/lookout layouts, broader terrain/road visual corrections and full-route driving/performance checks. New settlements are currently built at startup, not streamed by distance. Inventory/loot persistence and a general in-game build mode remain unfinished. No claim that all reference-road or build priorities are complete.
+
+## 2026-11-04: Bounded road earthwork corrections and traversal sampling
+
+- Short-run cleanup now compares sampled terrain costs before deleting a waypoint. It no longer freely straightens a contour-following climb just because the shortcut is dry. Corner rounding also shrinks when its curve moves more than 2 m vertically away from the original terrain-following runs.
+- Access roads compare up to eight successfully fitted approaches instead of accepting the nearest horizontal junction. Selection measures actual finished maximum cut/fill and penalizes overlapping road-height disagreement at the join. The main-road itinerary, single-join branches, widths, grades, 12 m smoothing target and 9 m earthwork blend remain unchanged. The smoothing target is explicitly documented as **not a hard earthwork bound**.
+- New regression test samples non-bridge segment midpoints against untouched world ground, including all roads rather than only the main corridor. Seeds 1/7/42 respectively: RMS cut/fill **20.20 → 17.08 m**, **19.73 → 17.18 m**, **26.45 → 22.26 m**; maximum absolute cut/fill **123.09 → 99.29 m**, **181.47 → 142.92 m**, **244.60 → 221.23 m**. Remaining maximum fills: **60.15 / 35.76 / 59.81 m**. These are serious remaining cuts/fills, not acceptable completed realistic earthworks. No bound was enlarged to make the tests pass.
+- The test enforces at least 10% RMS and 5% maximum improvement against those measured pre-change baselines. It also checks actual ground crossfall over a 4 m cross-section: maxima **17.10% / 7.04% / 7.70%**; seed 1 still has an undesirable steep local crossfall. All planned longitudinal segment grades remain within their existing road-class limits.
+- Actual Rapier samples use the finished ground callback and rolling terrain colliders, spawning separately on one straight sloping main-road section per seed. Four seconds of throttle after settling covers **32.95 / 27.32 / 32.79 m**, with lateral drift **0.19 / 0.004 / 0.12 m** and chassis clearance about **0.65–0.66 m**. This is roughly 93 m of isolated driving, **not continuous route traversal**, not a bridge/junction/town-door driving validation, and not a visual-driving proof.
+- Validation: 33 tests passed in roads, earthworks, ground, road rendering, settlements and terrain physics; typecheck and production build passed (existing large-chunk warning).
+- Browser: refreshed the main game at `127.0.0.1:5187/?fixed=1&objects=0`, confirmed 23 connected places and the approximately 38.17 km main road, and inspected Sunrise from above. Its awkward outside turn remains visible. Broader exit-side changes were tried but rejected because they broke route clearance/street alignment; they are not shipped. The remaining major trench was also located at road height through the debug camera; this was not driven.
+- Remaining acceptance scope: redesign Sunrise exits without braiding approaches; reroute infeasible mountain descents rather than merely widening trench bounds; improve deep-cut/fill side slopes and bad local crossfalls; drive the entire main road and every branch through intersections, settlement entrances and bridges; repeat the reference-view and performance review. Build mode was not part of this stage.
+
+### 2026-11-04: hard construction constraints and coupled terrain redesign
+
+- Supersedes the preceding percentage-improvement experiment, not its historical measurements. The original island's knife-edge, 500 m-scale relief did not admit reliable connected 8%-grade surface roads. A hard-grade router initially failed between Port Alder and Ironworks. Rather than silently relax grades, drop places, or manufacture tunnels, this implementation explicitly changes terrain generation: before drainage and placement, an erosion/chamfer envelope limits upland neighbour rise to 6%. The result is substantially lower, broader highlands, **not the original mountain silhouettes**. Taller dramatic mountains would need a different terrain/corridor design, a larger island, or real tunnel engineering.
+- Routing rejects over-grade dry edges and infeasible simplification shortcuts. Profiling intersects hard height intervals across the 10 m formation with grade and street/deck anchors; an empty intersection returns failure. Finished formations are checked at at most 1 m longitudinal intervals, including both edges, against a **6 m absolute cut/fill ceiling**. This is a maximum modest rural cutting/embankment, not a percentage improvement or a raised legacy tolerance. Shoulders use an 18 m smooth blend (a 6 m displacement gives a nominal maximum 1:2 blend slope before natural slope).
+- Corrected coupled river artifacts: channel depth is capped at 3 m; water and excavation use each cell's drainage surface rather than a neighbouring river stamp's height. This also fixes upstream water being stamped below its outlet on the redesigned terrain.
+- Bridges may slope within class grade rather than forcing every crossing above its highest bank. Two dry samples at each end provide real abutments. They remain restricted to actual water crossings, not mountain viaducts. Alternative gates are tried without relaxing grade/clearance. Branch routes avoid other settlement pads and bridge-side landings; junction ground uses smoothly weighted per-road projections instead of discontinuously switching ribbons.
+- Preserved one continuous main itinerary, street alignment, reserved main-road separation, all residential sites, six outposts and five lookouts in every regression seed. Lookout height is relative to island relief, with 750 m separation; no lookout is silently lost to the obsolete 140 m cutoff. The current network generates road/dirt/trail, not highway.
+- Hard regression samples every non-deck segment at <=1 m spacing, offsets -5/-2.5/0/2.5/5 m and shoulder offsets +/-14/+/-23 m. It checks both planned formation and actual ground against natural world ground, including mixed deck/approach segments, and actual transverse surface slope across 4 m and 10 m. Limits: 6 m construction difference, 8% crossfall (including junctions), existing per-class grades. Exact observed extrema:
+
+| Seed | Maximum cut (m) | Maximum fill (m) | Maximum crossfall |
+| --- | ---: | ---: | ---: |
+| 1 | 3.813254477591226 | 3.856223365348974 | 0.05033557257788886 |
+| 2 | 3.824549007225677 | 3.286261202240965 | 0.0585906391112232 |
+| 3 | 3.950359697355637 | 4.900919569457477 | 0.05732162439366206 |
+| 7 | 3.252474379852657 | 3.464331917968309 | 0.07264487995114166 |
+| 42 | 3.6589892333582554 | 5.604457495925743 | 0.05687052629566267 |
+
+- These are extrema of the sampled constructed footprint/shoulders on the **redesigned** world, not a claim that the original tall mountains were successfully routed unchanged. Continuous analytic bounds between all terrain/render samples are not proven. The shared formation solver applies to every class; seed regressions cover all three generated classes.
+- Validation: 53 focused tests pass across earthworks, roads, ground, places, world, settlements and road rendering, including an artificial impassable ridge that must produce an explicit routing failure rather than dropped connectivity. `npm run typecheck` and `npm run build` pass, with the existing bundle-size warning. Five isolated Rapier driving samples advance 25.02/25.59/25.72/27.10/26.89 m with near-zero lateral drift; these are not a full-network drive.
+- Browser inspection confirms 23 connected places and 12 roads; both the highest main-road view and the former trench area near X493/Z786 now show broad, low highlands without the old vertical cutting. This also visibly confirms the substantial scenery tradeoff, not preservation of the old mountains. Full continuous driving, richer mountain scenery, tunnels and the separate Sunrise exit redesign are not claimed complete.
+
+### Road-first mountains (supersedes the globally lowered final terrain)
+
+- Chris approved preserving mountains: “1 but just build out more roads and then build in the mountains between the roads.” The low-gradient envelope is now only a **routing draft**, not the finished island. Original blurred relief is retained, roads/places are planned first, and `restoreMountains` builds mountainous inter-road areas before terrain meshes, water, props, settlement views or collision ground are created.
+- The finalizer consumes the completed plans; it never calls world, place or road generation. Road planning remains deterministic and does not mutate terrain. Main-game initialization explicitly runs the finalizer once.
+- Reserve 80 m around road samples (plus grid interpolation support), residential pads and the starting-town/spawn approach. Restore original relief outside these reservations using a smooth 450 m transition, capped by a 0.55 rise/run relief envelope. This creates broad valley sides, not narrow road trenches; some original mountain vertices survive unchanged. Closely spaced roads naturally leave lower intervening hills.
+- Preserve every wet cell and its water level. Bound restored relief downstream using the existing flood surface and upstream-first drainage tree, so raising an inter-road saddle cannot dam an upstream reserved corridor. Drainage directions, accumulation and lake/river surfaces remain consistent; mountain aridity and height/desert statistics are updated. The shared finalized map feeds both rendering and collision.
+- Keep the connected 23-place/12-road network and continuous main itinerary; no extra duplicate loops are required for these seeds. Do not label buried roads as tunnels: no tunnels or dry-land bridge substitutes are introduced, and the 6 m formation and class-grade limits remain unchanged.
+- Validation includes five-seed restored-world connectivity, formation/shoulder bounds, crossfall, downhill drainage, unchanged water, preserved original upland vertices and driving smoke tests. Browser inspection covers the former X493/Z786 area from the air and a lakeside main-road/branch junction. This is terrain co-design, **not preservation of every original silhouette**: reserved valleys and drainage constraints reshape nearby mountains. Whole-network continuous driving and all ten reference views remain unverified.
+- Measured seeds 1/2/3/7/42: final peaks 381.84/342.68/349.22/447.05/366.80 m; maximum restored relief 288.23/273.56/236.19/329.70/270.68 m. Between 209 and 908 vertices above 200 m exactly retain the original mountain relief in each seed. Worst constructed earthwork remains 5.6045 m; worst sampled crossfall 7.2645%. All five driving smoke tests pass.
+- Final validation: typecheck/build pass (existing large-bundle warning); full suite 210 passed, two unrelated failures in Cannon ramp driving and yard-vehicle model bounds. Final browser view confirms restored mountain slopes at X493/Z786 with roads remaining in the low corridors. Hidden-tab/software-renderer frame timing is not a performance acceptance result.
+# 2026-11-04 Scenery references and northern city blocks
+
+Chris supplied 32 reference images and the local Supply Line Assets pack. These guide original environment composition, not copied screenshots, branded buildings or watermarked textures.
+
+- Images 1-7: weathered desert highways, lane edges, poles/wires, warning signs, guardrails, fenced industrial buildings, isolated roadside stops, snowy woods and abandoned vehicles.
+- Images 8-14: wooded coastal docks, industrial clearings, lakeside roads, camps, apartment blocks with garages, fishing settlements and utility corridors.
+- Images 15-26: wind-rippled dunes, high mountain silhouettes, alpine lakes, rocky streams, wooded foothills, snow patches, contrasting vegetation and atmospheric depth. These remain scenery direction, not a claim that snow, waterfalls or a day/night cycle are implemented.
+- Images 27-30: tree-lined town streets, forest road approaches, substantial roadside buildings/parking and furnished multi-storey interiors. Upstairs gameplay and furnished residential interiors remain future work.
+- Images 31-32: the game's northern coastal road/lake section needs real city blocks instead of empty terrain.
+
+Implemented a northern urban district by expanding the northernmost non-starting town to a five-by-five block footprint. In the default seed this is Fenwick, near X -1008, Z -4080. Existing regional place identities and positions remain intact; moving the original city changed unrelated routes and was rejected after road regression checks. Fenwick and the existing city now use urban building heights (9.6-38.4 m), a mix of tall solid residential/office buildings and enterable ground-level stores, repeated upper-floor windows and masonry trim, and concrete pavement strips. Upper floors are visual facades, not navigable apartments. Facade details are batched by shared material per settlement instead of issuing separate window draw calls.
+
+The expanded footprint is shared by routing gates, street anchors, ground levelling, mountain clearance, prop exclusion and settlement generation. All loot retains unique global IDs and existing collision/store-access rules.
+
+Asset inspection found a Unity-oriented pack (FBX, prefabs, textures and shaders). Existing world materials already use its sand, grass, rock, bark, asphalt and concrete images; this pass reuses those imports, with provenance in public/textures/world/SOURCES.md, rather than duplicating the pack or treating Unity prefabs as browser-ready models. Brick facades retain the existing separately documented sources.
+
+Validation: 27 focused settlement/place/road/earthworks tests pass, including the northern location, skyline scale, shop reachability, unique loot, five-seed road limits and physics smoke checks. Typecheck and production build pass with the existing bundle warning. This is a first downtown district, not a kilometre-scale metropolis or completion of all 30 scenery references.
+
+## Barter rules for the traders (Chris: barter only, no money)
+
+- src/rules/trade.ts, tests in tests/trade.test.ts (8, all pass). Pure rules, nothing drawn yet and no trader is in the world yet.
+- How it works (Claude chose the numbers): every item has a worth in units (a motor 220, a tyre 45, a wrench 30, beans 10, crackers 4). The trader wants goods worth more than what you ask for, by a margin (1.25 to 1.5 at first, seeded per trader). Pushing for a better price lowers the margin 0.08 at a time down to that trader's floor (1.05 to 1.15) and costs patience (2 to 4 pushes); after that the trader refuses to haggle. A swap that would not fit in your pack is undone completely.
+- Five traders: the starting town, the three other towns and the city, one salvage yard each, which matches the five traders in the concept. Each trader has a seeded stock of food, goods and always some tyres; motors and wrenches only sometimes.
+- Not done: drawing the other towns and city, their salvage yards, the trader character and the trade screen, joining the starting yard to its trader, and the van, box truck, big rig and flatbed trailer placed in the yards.
+
+## 2026-11-04 Larger settlements and connected residential neighbourhoods
+
+Supersedes the earlier five-by-five skyline-only expansion. Keep the existing core streets, gates, locations and Sunrise junkyard unchanged. Add seeded, road-connected small neighbourhood foundations along approaches and grow additional connected side-street blocks from them. Each pad is fitted locally to terrain; rejected candidates cannot raise the 6 m road-earthwork or 8% crossfall bounds. Mountain restoration reserves these footprints, rather than flattening a kilometre-wide city mesa.
+
+Seed 1 measured built street-envelope dimensions and actual building counts (envelopes include open ground between districts, **not** fully developed rectangular acreage):
+
+| Settlement | Before | After | Businesses | Detached homes | Apartment buildings |
+|---|---|---|---:|---:|---:|
+| Port Alder | 140 × 140 m, 21 buildings | 1,124 × 1,214 m, 107 buildings | 32 | 28 | 79 |
+| Northern Fenwick | 140 × 140 m, 20 buildings | 1,317 × 800 m, 101 buildings | 31 | 27 | 74 |
+| Oro Verde | 84 × 84 m, 6 buildings | 300 × 704 m, 31 buildings | 4 | 25 | 0 |
+| Halcyon | 84 × 84 m, 8 buildings | 734 × 318 m, 41 buildings | 4 | 33 | 0 |
+| Little Ash | 56 × 56 m, 4 buildings | 485 × 495 m, 17 buildings | 2 | 13 | 0 |
+| Wren | 56 × 56 m, 4 buildings | 404 × 157 m, 15 buildings | 3 | 11 | 0 |
+| Quarry End | 56 × 56 m, 4 buildings | 487 × 391 m, 16 buildings | 3 | 12 | 0 |
+| Brindle | 56 × 56 m, 3 buildings | 152 × 524 m, 17 buildings | 1 | 14 | 0 |
+
+Businesses under apartments count in both business and apartment columns. Commercial blocks have signed, enterable ground floors, shelves and a real ceiling beneath solid upper storeys. Apartment-only and pitched-roof detached-home side streets have separate housing assignments; non-residential logistics destinations never acquire a blanket urban flag. IDs are globally unique across cores, neighbourhoods and facilities; existing inventory/opened-loot handling is shared. Map footprints, ground, collision, prop exclusion and mountain reservations consume the same neighbourhood plan. Immutable scenery and facade detail are spatially batched; openable stock stays independent. Existing supplied world textures are reused without new dependencies.
+
+The increase is not just the bounding envelope: counting only the original core street-grid area plus accepted 28 × 28 m neighbourhood grids, excluding every intervening gap, seed 1 Port Alder grows from 19,600 to 87,024 m² (4.44×), Fenwick to 83,104 m² (4.24×), Oro Verde from 7,056 to 26,656 m² (3.78×), Halcyon to 32,928 m² (4.67×), and villages from 3,136 to 11,760–14,112 m² (3.75–4.5×). These are street-block areas, not building-floor area.
+
+Browser verification at northern Fenwick: aerial inspection of the expanded connected footprint; walked through the west-facing ground-floor market entrance at approximately X -945, Z -3978, below a 19.2 m apartment building; approached shelf ID 573 and pressed E, transferring four water bottles into the previously empty inventory. Ground floor has a ceiling rather than a hollow tower interior.
+
+Validation: 43 focused tests passed across settlement/terrain/roads/facilities/batching suites, including seeds 1, 2, 3, 7 and 42. New checks measure developed block area excluding gaps, within-kind variety, city > town > village building counts, connected street graphs, vehicle-clear centre lines, foundations/collider ground agreement, unique loot IDs, business door entry and shelf inventory transfer. Every constructed road formation was sampled after mountain restoration: worst cut/fill magnitude 5.790 m (limit 6 m), maximum crossfall 7.844% (limit 8%), and all class grade bounds held; five Rapier driving smoke tests passed. Typecheck and production build passed (existing large-bundle warning remains). No full-suite claim: the previously known unrelated cannon-ramp and yard-vehicle issues were not changed or re-run.
+
+Limits: development follows feasible local terrain and therefore includes gaps, irregular outskirts and different populations by seed. These are small block neighbourhoods, not fully furnished realistic city parcels. Homes/apartment upper floors remain exterior-only; no simulated resident population. Planning takes noticeably longer than the old tiny settlements, and this browser sample was roughly 20–35 fps with ~700 draws inside the shop while validation processes were running; this is not a clean laptop performance certification. All loot remains session-only as before.
+# 2026-11-04 Road-fronting facilities and grouped housing
+
+Final facility visual follow-through: inspected the seed-1 military compound, depot termination court and North Quay. Corrected terrain protruding through court/access pavement by grading their footprints and shoulders while preserving existing roads and sea terrain. Facility entrances/courts match their floor heights, and access lanes clear buildings/fixtures. The final destination/ground check passes all 19 tests; production build/typecheck pass. Actual truck traversal of these facility entrances remains untested.
+
+Chris's six layout screenshots show a military compound straddling a diagonal through-road, isolated depots on mismatched square aprons, and residential buildings strung individually along approaches. The requested correction is road frontage and actual neighborhoods, not more scattered lots.
+
+- Residential expansion now places two-by-two street blocks with at least three buildings each. Local-street growth is considered before another arterial attachment, with at most four arterial entrances per city, three per town and two per village. Seeded population/size differences remain.
+- Each block has a local terrain-fitting foundation; its 40 m access street grades from the existing junction to the block, rather than forcing every neighborhood onto the arterial's elevation. Shared intersection samples keep graph and physical street connectivity aligned. Expanded foundation clearances protect the original core's shop floors.
+- Houses/apartments face their nearest local street. Fronts stay clear of loot containers; house doors follow the same frontage. Homes remain exterior-only.
+- Facilities use road-clear layouts with projected access entrances, deliberate courts and gates instead of building across through-roads. The same access lanes are rendered and registered as driving/walking surfaces. Docks retain obstacle-aware quay access. Building/fixture clearance tests use full road segments, including diagonal/curving roads, not only nearest sampled points.
+- Default-seed Fenwick retains 103 buildings and Port Alder 107. Fenwick's 23 added blocks occupy 72,128 square metres of street-block area, excluding the existing core and gaps; its footprint is approximately 1,332 by 912 m. Larger blocks reduce the prior one-building apron/spur pattern without shrinking cities back into tiny settlements.
+
+Validation: 36 focused neighborhood, settlement, road/earthworks, destination and render-batching tests pass; typecheck and production build pass with the existing bundle warning. Five-seed housing checks cover grouping, capped arterial entrances, frontage, real local-street connectivity, unobstructed streets, floor agreement and business entry/loot. Destination tests cover road/obstacle clearances and entrances. This is layout correction, not new upstairs/home interiors.

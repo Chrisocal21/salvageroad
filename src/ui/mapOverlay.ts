@@ -36,6 +36,7 @@ export function createMapOverlay(
     /** Metres across the world. */
     worldSize: number;
     places: Place[];
+    districts?: { x: number; z: number }[];
     /** Called with world coordinates when the big map is clicked. */
     onJump: (x: number, z: number) => void;
   },
@@ -94,6 +95,13 @@ export function createMapOverlay(
     ctx.fillStyle = '#0c3f5c'; // sea blue past the map's edge
     ctx.fillRect(0, 0, px, px);
     ctx.drawImage(base, cx - half, cy - half, half * 2, half * 2, 0, 0, px, px);
+    ctx.fillStyle = '#b7aaa0';
+    for (const d of opts.districts ?? []) {
+      const x = ((d.x - last.x) / (MINIMAP_SPAN * 2) + 0.5) * px;
+      const z = ((d.z - last.z) / (MINIMAP_SPAN * 2) + 0.5) * px;
+      const size = 28 / (MINIMAP_SPAN * 2) * px;
+      ctx.fillRect(x - size / 2, z - size / 2, size, size);
+    }
     // Places inside the window.
     for (const p of places) {
       const mx = ((p.x - last.x) / (MINIMAP_SPAN * 2) + 0.5) * px;
@@ -118,6 +126,11 @@ export function createMapOverlay(
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(base, 0, 0, px, px);
     const toX = (x: number) => (x / worldSize + 0.5) * px;
+    ctx.fillStyle = '#b7aaa0';
+    for (const d of opts.districts ?? []) {
+      const size = Math.max(1.5, 28 / worldSize * px);
+      ctx.fillRect(toX(d.x) - size / 2, toX(d.z) - size / 2, size, size);
+    }
     // Places: a dot and the name. The starting town gets a ring too.
     ctx.font = `${Math.max(11, Math.round(px / 55))}px system-ui, sans-serif`;
     ctx.textAlign = 'left';
@@ -133,7 +146,7 @@ export function createMapOverlay(
       ctx.arc(mx, my, r, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      const label = `${p.name} · ${p.kind}`;
+      const label = `${p.name} · ${p.urban ? 'city district' : p.kind}`;
       const labelX = mx + r + 4 + ctx.measureText(label).width > px - 4 ? mx - r - 4 : mx + r + 4; // keep it on the map
       ctx.textAlign = labelX < mx ? 'right' : 'left';
       ctx.lineWidth = 3;

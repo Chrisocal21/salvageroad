@@ -12,10 +12,10 @@ const DECK = new THREE.Color(0x707078);
 
 /**
  * One mesh for every road: a ribbon per road, as wide as its class. Off bridges the ribbon hugs the ground
- * (or the road's own height where that is higher, so embankments show); on bridges it rides the deck.
+ * at each ribbon edge; on bridges it rides the deck.
  * The ground height defaults to the world's own; the game passes its levelled ground so the ribbon sits on it.
  */
-export function createRoadMesh(map: WorldMap, network: RoadNetwork, ground: (x: number, z: number) => number = (x, z) => groundHeight(map, x, z)): THREE.Mesh {
+export function createRoadMesh(map: WorldMap, network: RoadNetwork, ground: (x: number, z: number) => number = (x, z) => groundHeight(map, x, z)): THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> {
   let pointCount = 0;
   for (const road of network.roads) pointCount += road.points.length;
   const positions = new Float32Array(pointCount * 2 * 3);
@@ -37,12 +37,13 @@ export function createRoadMesh(map: WorldMap, network: RoadNetwork, ground: (x: 
       const len = Math.hypot(dx, dz) || 1;
       dx /= len;
       dz /= len;
-      const y = p.bridge ? p.y + 0.4 : Math.max(ground(p.x, p.z) + 0.25, p.y + 0.15);
       c.copy(p.bridge ? DECK : SURFACE[road.class]);
       for (const s of [-1, 1]) {
-        positions[v] = p.x + -dz * half * s;
-        positions[v + 1] = y;
-        positions[v + 2] = p.z + dx * half * s;
+        const x = p.x + -dz * half * s;
+        const z = p.z + dx * half * s;
+        positions[v] = x;
+        positions[v + 1] = p.bridge ? p.y + 0.25 : ground(x, z) + 0.25;
+        positions[v + 2] = z;
         colours[v] = c.r;
         colours[v + 1] = c.g;
         colours[v + 2] = c.b;

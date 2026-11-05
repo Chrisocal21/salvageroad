@@ -4,6 +4,22 @@ Written 2026-11-04 in a planning chat with Chris. This is the game concept in on
 
 Tags: **[stated]** Chris said it. **[agreed]** proposed and Chris said yes. **[proposed]** not confirmed, ask before building. **Open** means undecided, ask Chris.
 
+### Housing, shopping centers and downtown flow (latest reference follow-through)
+
+**Starting trader update:** Chris specified tools and vehicle parts for Sunrise. The trader is now inside the existing brick workshop, with a walk-in doorway and customer space. Stock uses the existing wrench, tire, motor and big-rig tire items; other trader specialties and additional item types remain undecided.
+
+**Latest gameplay step:** Sunrise now has an interactable yard trader and a barter-only HUD: choose goods from the pack and trader stock, haggle, then exchange if accepted and there is room. Closing does not reset stock/patience during a run. Trading is not saved on reload. Five settlement traders remain the target; the other four trader integrations, specialties, yard-vehicle acquisition/drivability and extra parts are still pending. No new external assets were imported for the starting trader.
+
+Neighborhoods and land-side facilities must occupy dry ground across their entire footprints and access corridors, including a shoreline setback; high ground elevation alone is not evidence that an inland river/lake is absent. Intentional road bridges and dock decks remain separate cases.
+
+The main map now includes Sunrise's starting yard plus three remote salvage yards with wreck scenery, workshops and loot. Their M-map labels point to the compounds, not the original planning anchors. Remote yards do not duplicate the starter car or repair-part sequence; wreck scrapping and additional haulable cargo are not implemented by this scenery pass.
+
+Chris's 18 additional references distinguish residential neighborhoods, shopping centers and dense mixed-use downtowns. Housing needs consistent street frontage, gardens, driveways and connected local streets; commercial centers need adjoining businesses, common pedestrian frontage, shared parking and sensible collector entrances; urban cores need ground-floor commerce, apartments above and stronger pedestrian streets. [stated]
+
+The first implementation gives local residential blocks six homes in two outward-facing rows, garden space instead of a central road, lawns, paths, driveways and trees. Dedicated shopping blocks contain four adjoining lootable shops, a common promenade and marked parking/drive aisle. Both use perimeter streets and sidewalks; apartment districts keep connected internal streets. Larger settlements mix these types without changing Sunrise's starting layout.
+
+Curved collectors, longer residential tracts, fenced parcels, anchor malls, parking landscape islands, continuous downtown street walls and plazas remain reference targets, not completed features. Existing home and apartment upper floors remain exterior-only. The main game's build-mode requirement remains separate and pending.
+
 ## Where the build stands (November 4, 2026)
 
 Playable at localhost:3000 (the builder sandbox is /base/, the world viewer is /world/). Details in DECISIONS_LOG.md, progress in docs/ROADSURVIVAL_PROGRESS_TRACKER.md.
@@ -14,12 +30,22 @@ Built:
 - The El Cajon: a rusty shell rebuilt from 18 loose pieces with a wrench, with doors, hood and tailgate that open, a driver and a passenger seat, and a 24 slot store in the bed that shows what is in it.
 - Hunger and thirst, an inventory, an HTML HUD, a fly mode and a jump-to-town key for testing.
 - Shipping containers: a real model, a snap grid with a support rule and pillars, and putting them down by hand from a truck in first person. One container stands in the junkyard.
-- A plan of places for any island: a city, towns, villages, an industrial yard, outposts, lookouts and two docks far apart. Not drawn in the game yet.
-- A road network plan for any island: highways join the city, towns, industrial yard and docks, roads join the villages, dirt roads the outposts, trails the lookouts, with bridges over water. Drawn in the /world/ viewer; the game world does not level or use it yet.
+- A plan of places for any island: a city, towns, villages, an industrial yard, outposts, lookouts and two docks far apart. Place markers and map labels are in the game; buildings outside the starting town are still to come.
+- One continuous main road through the city, towns, villages, industrial yard and docks, with single-join access roads for outposts and lookouts and bridges over water. Levelled into the game world, with the same route shown in the /world/ viewer and map.
 
-Roads and water (added): one road style (10 m wide, one grey) joining every place, smoothed into long straight runs and bends, meeting the starting town along its own streets and meeting each other in T intersections; the coast and river edges are smooth and no longer change with the camera angle.
+Roads and water (added): one road style (10 m wide, one grey), with one continuous town-to-town route instead of overlapping duplicate corridors. It meets the starting town along its own streets at their fixed height; access roads end once at a T junction. Pavement follows the ground at both edges, and exact segment support removes height steps. The coast and river edges are smooth and no longer change with the camera angle.
 
 Not built yet: loading a container onto the truck from the yard or docks (press U to unload only works once cargo is on the truck); lane markings; the other towns and the docks drawn in the world; the big rig and the flatbed trailer; hauling containers from the world; fuel; restoring the paint; trees and shrubs; traders, hunting and the CDs; saving the game (only the base is saved); co-op.
+
+### Latest visual review and next requirements (Chris, November 4, about 15:00)
+
+Chris supplied ten screenshots and asked for better, believable roads, actual visible cities/towns, and build mode inside the game. [stated] The detailed picture-by-picture intake is in [DECISIONS_LOG.md](../DECISIONS_LOG.md); pending work is in [the progress tracker](./ROADSURVIVAL_PROGRESS_TRACKER.md).
+
+- One connected road is not yet a believable road. The deep straight mountain cuts, tall ledges/fills, abrupt terrain transitions, awkward Sunrise loop and unexplained road ends still need correction. Keep the single main town-to-town route. [stated]
+- The other city, towns and villages must be physically present, with visible buildings, local streets and connected entrances. Place markers and map names are not finished settlements. [stated]
+- Build mode must be accessible in the main game on the same map, not only in the /base/ sandbox. Existing cargo unloading on U is only part of that functionality. [stated]
+- Reuse the placement, snapping, support, collision and save systems already built. A proposed testing catalogue should be separate from survival acquisition: this request does not implicitly make shipping containers free craftable items or reverse the found-and-hauled design. Exact catalogue, costs and controls are still unspecified. [proposed]
+- These are recorded requirements, not newly completed features. Routing/grade tests must be supplemented with ground-level and aerial visual checks of the supplied problem areas.
 
 ## The game in one line
 
@@ -239,3 +265,22 @@ Open:
 - Next for the world: highways, roads, dirt roads, trails, bridges, docks (two at least), cities and towns. [stated] The order is the places and docks first, and roads and highways only when Chris says. [stated]
 - Built so far: a plan of places for any island: a city, three more towns beside the starting one, villages, an industrial yard, outposts, lookouts for trails to climb to, and two docks far apart. It is a plan only: nothing in the game draws it yet.
 - Open: how many shipping containers across the map (Claude recommends about 150: around 50 at each dock, 30 in industrial and town yards, 15 near roads, 1 in the junkyard); what each kind of place holds; whether containers differ by place.
+
+### Implemented residential gameplay slice (2026-11-04)
+
+The main game now draws the city, other towns and villages with 5/3/2-lot-wide street grids, buildings, enterable stores and loot containers. Roads meet their actual streets; settlement ground levels follow the fitted road elevation. Driving and walking collide with the same buildings, store walls and containers. Loot uses the existing inventory and globally unique container IDs, while store reachability remains local to each settlement. Sunrise's junkyard and rebuild progression are not duplicated.
+
+Browser smoke checks confirmed market loot at all eight remote residential locations for seed 1; automated integration checks cover seeds 1, 7 and 42. A continuous driving tour, full visual/performance review, richer architectural identities, non-residential layouts and main-game build mode remain separate unfinished work.
+
+### Mountain-road construction correction (2026-11-04)
+
+The road profile now has a hard 6 m cut/fill bound over its full 10 m formation, including approaches, rather than a smoothing target that could turn into a 200 m trench. A* rejects over-grade dry links; infeasible profiles fail instead of reporting a disconnected success. Bridges have grade-limited decks and short dry abutments; branches avoid settlement pads and bridge-side junctions. Junction ground blends continuously, and shoulders blend over 18 m.
+
+**Intentional terrain-design change:** the former sharp 500 m-scale ridges were not compatible with connected surface roads on this 12 km island. Before drainage and site selection, upland relief is eroded to a 6% neighbour-slope envelope. This changes the whole island into lower, broad highlands; it does **not** preserve the old dramatic mountain silhouettes or add tunnels. River carving is also capped at 3 m and water follows each cell's drainage elevation. Lookouts use relative high ground and 750 m spacing so all five remain present, rather than disappearing with the old absolute altitude cutoff.
+
+Seeds 1/2/3/7/42 retain one main road and all six outpost/five lookout branches. Dense tests bound planned and actual ground cut/fill across pavement and sampled shoulders to 6 m, and transverse ground slope over 4 m/10 m sections to 8%. Observed maximum construction difference is 5.604457495925743 m; maximum crossfall is 7.264487995114166%. These checks cover all generated classes (road/dirt/trail); highways are not generated by the current network. Full-route driving and detailed visual/art-direction review remain unfinished.
+# November 4 scenery direction
+
+Settlement layout must read as neighborhoods: grouped homes fronting connected local streets, limited arterial entrances and distinct business streets. Industrial/military sites belong beside through-roads with gated access and a clear internal court, not across the public road. The November 4 layout correction replaces single-building residential spurs with multi-building blocks while retaining varied settlement scale.
+
+The 32-image review establishes weathered roadside infrastructure, forested lake/coastal roads, industrial/logistics sites, varied dunes and mountain biomes, and denser urban blocks as environment direction. Images 31-32 specifically target the northern coastal region for city development. Fenwick now has connected, locally terrain-fitted neighbourhoods, apartment-only blocks, ground-floor business streets and detached-home side streets around its retained five-by-five core. Seed 1 spans a 1,317 × 800 m street envelope with 101 buildings (previously 140 × 140 m and 20 buildings); Port Alder has 107 buildings, other towns 31–41, and villages 15–17. These envelopes include undeveloped gaps, not continuous built-up acreage. Businesses beneath apartments are enterable and lootable; homes and upper floors remain exterior-only. This is not a finished metropolis or completion of all reference scenery. Existing textures from the supplied Supply Line Assets pack are reused; detailed measurements, browser loot verification and performance limitations are recorded in the decision log.

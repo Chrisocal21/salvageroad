@@ -16,6 +16,7 @@ import { pieceBox } from './baseWorld';
 export const LOT = 28; // m from street centre to street centre
 export const ROAD = 9; // m wide
 export const GRID = 3;
+export const settlementGrid = (kind: string, urban = false) => urban || kind === 'city' ? 5 : kind === 'village' ? 2 : GRID;
 const LOT_INSET = ROAD / 2; // free space inside a lot starts this far from the lot edge
 
 /** Store walls. */
@@ -23,9 +24,10 @@ export const STORE = { wall: 0.3, doorHalf: 0.8 };
 /** The junkyard's fence and gate. */
 export const YARD = { hx: 18, hz: 14, fence: 0.2, fenceHeight: 2.2, gateHalf: 3.5 };
 
-export type StoreKind = 'market' | 'hardware';
+export type StoreKind = 'market' | 'hardware' | 'warehouse' | 'barracks';
 
 export interface Building extends Box2 {
+  housing?: 'home' | 'apartments';
   id: number;
   height: number;
   color: number;
@@ -68,6 +70,7 @@ export interface PartSpawn {
 }
 
 export interface Junkyard extends Box2 {
+  trader?: { counter: Solid; person: Solid };
   /** The gap in the fence on the street side (+Z), centred on this X. */
   gateX: number;
   fence: Solid[];
@@ -85,6 +88,20 @@ export interface Junkyard extends Box2 {
 }
 
 export interface Town {
+  districtKind?: 'homes' | 'apartments' | 'shopping';
+  lawns?: Box2[];
+  parking?: Box2;
+  trees?: { x: number; z: number; height: number; radius: number }[];
+  siteKind?: 'depot' | 'military' | 'dock' | 'lookout' | 'salvage';
+  placeId?: number;
+  salvage?: { yard: Junkyard; yaw: number };
+  groundY?: number;
+  yard?: Box2;
+  /** Finite facility drives, shared by the rendered pavement and walking/driving surface. */
+  accessLanes?: { from: { x: number; z: number; y: number }; to: { x: number; z: number; y: number }; width: number }[];
+  fixtures?: (Solid & { color: number })[];
+  overhead?: (Solid & { color: number; y0: number })[];
+  quay?: Box2;
   center: { x: number; z: number };
   /** Street centre lines. Vertical streets run along Z at these X values and vice versa. */
   roadsX: number[];
@@ -92,6 +109,7 @@ export interface Town {
   buildings: Building[];
   containers: ContainerSpawn[];
   junkyard: Junkyard;
+  hasJunkyard?: boolean;
   /** Everything solid: buildings (or a store's walls), the junkyard fence, wrecks, shed and tyre piles. Not containers. */
   solids: Solid[];
   /** Where the El Cajon sits in the junkyard, facing the gate. yaw 0 faces +Z. */
@@ -111,7 +129,7 @@ function toWorld(ox: number, oz: number, yaw: number, lx: number, lz: number): [
 }
 
 /** A box given in a quarter-turned local frame, as a world box. */
-function localBox(ox: number, oz: number, yaw: number, lx: number, lz: number, lhx: number, lhz: number): Box2 {
+export function localBox(ox: number, oz: number, yaw: number, lx: number, lz: number, lhx: number, lhz: number): Box2 {
   const [x, z] = toWorld(ox, oz, yaw, lx, lz);
   const quarter = Math.abs(Math.sin(yaw)) > 0.5;
   return { x, z, hx: quarter ? lhz : lhx, hz: quarter ? lhx : lhz };
@@ -146,6 +164,17 @@ export function storeInterior(b: Building): Box2 {
   return { x: b.x, z: b.z, hx: b.hx - STORE.wall, hz: b.hz - STORE.wall };
 }
 
+export function workshopWalls(yard: Junkyard): Solid[] {
+  if (!yard.trader) return [yard.shed];
+  return storeWalls({ ...yard.shed, id: -1, color: 0, front: -Math.PI / 2 })
+    .map(w => ({ ...w, height: yard.shed.height }));
+}
+
+export function insideWorkshop(yard: Junkyard, x: number, z: number): boolean {
+  return Math.abs(x - yard.shed.x) < yard.shed.hx - STORE.wall &&
+    Math.abs(z - yard.shed.z) < yard.shed.hz - STORE.wall;
+}
+
 /** The store the point is inside, or null when outside. */
 export function storeAt(town: Town, x: number, z: number): number | null {
   for (const b of town.buildings) {
@@ -158,24 +187,30 @@ export function storeAt(town: Town, x: number, z: number): number | null {
 
 /** The containers that can be reached from a point: those in the same store, or those outside when outside. */
 export function reachableContainers(town: Town, x: number, z: number): ContainerSpawn[] {
+  if (town.hasJunkyard !== false && town.junkyard.trader && insideWorkshop(town.junkyard, x, z)) return [];
   const here = storeAt(town, x, z);
   return town.containers.filter((c) => (c.inside ?? null) === here);
 }
 
-export function generateTown(seed: number, center = { x: 0, z: 100 }): Town {
+export function generateTown(seed: number, center = { x: 0, z: 100 }, options: { grid?: number; junkyard?: boolean; containerOffset?: number; urban?: boolean; neighborhood?: 'business' | 'apartments' | 'homes' } = {}): Town {
+  const grid = options.grid ?? GRID;
+  if (grid === 2 && (options.neighborhood === 'homes' || options.neighborhood === 'business'))
+    return generateStreetDistrict(seed, center, options.neighborhood, options.containerOffset ?? 0);
   const rand = makeRandom(seed * 31 + 17);
-  const x0 = center.x - (GRID * LOT) / 2;
-  const z0 = center.z - (GRID * LOT) / 2;
-  const roadsX = Array.from({ length: GRID + 1 }, (_, i) => x0 + i * LOT);
-  const roadsZ = Array.from({ length: GRID + 1 }, (_, i) => z0 + i * LOT);
+  const x0 = center.x - (grid * LOT) / 2;
+  const z0 = center.z - (grid * LOT) / 2;
+  const roadsX = Array.from({ length: grid + 1 }, (_, i) => x0 + i * LOT);
+  const roadsZ = Array.from({ length: grid + 1 }, (_, i) => z0 + i * LOT);
 
   const buildings: Building[] = [];
   const containers: ContainerSpawn[] = [];
   const lots: { lotX: number; lotZ: number; i: number; j: number }[] = [];
 
-  for (let i = 0; i < GRID; i++) {
-    for (let j = 0; j < GRID; j++) {
-      if (rand() < 0.15) continue; // an empty lot now and then
+  for (let i = 0; i < grid; i++) {
+    for (let j = 0; j < grid; j++) {
+      const minimum = options.neighborhood ? Math.min(3, grid * grid) : 1;
+      const remaining = grid * grid - (i * grid + j);
+      if (rand() < 0.15 && buildings.length + remaining > minimum) continue;
       const lotX = roadsX[i] + LOT / 2;
       const lotZ = roadsZ[j] + LOT / 2;
       const free = LOT - 2 * LOT_INSET; // 19 m of usable ground in the lot
@@ -189,17 +224,22 @@ export function generateTown(seed: number, center = { x: 0, z: 100 }): Town {
         z: lotZ + (rand() * 2 - 1) * Math.max(0, slackZ),
         hx: w / 2,
         hz: d / 2,
-        height: 3.5 + rand() * 3.5,
+        height: options.urban ? 9.6 + Math.floor(rand() * 10) * 3.2 : 3.5 + rand() * 3.5,
         color: BUILDING_COLORS[Math.floor(rand() * BUILDING_COLORS.length)],
       };
       const roll = rand();
-      if (roll < 0.45) b.store = roll < 0.3 ? 'market' : 'hardware';
+      if (roll < (options.urban ? 0.18 : 0.45)) b.store = roll < (options.urban ? 0.1 : 0.3) ? 'market' : 'hardware';
+      if (options.neighborhood) {
+        b.housing = options.neighborhood === 'homes' ? 'home' : 'apartments';
+        b.height = b.housing === 'home' ? 3.2 + Math.floor(rand() * 2) * 2.8 : 9.6 + Math.floor(rand() * 6) * 3.2;
+        b.store = options.neighborhood === 'business' ? roll < 0.6 ? 'market' : 'hardware' : undefined;
+      } else if (options.urban) b.housing = 'apartments';
       buildings.push(b);
       lots.push({ lotX, lotZ, i, j });
     }
   }
   // Every town has somewhere to find food and water: make the biggest building a market if none is.
-  if (!buildings.some((b) => b.store === 'market') && buildings.length > 0) {
+  if ((!options.neighborhood || options.neighborhood === 'business') && !buildings.some((b) => b.store === 'market') && buildings.length > 0) {
     const biggest = buildings.reduce((a, b) => (b.hx * b.hz > a.hx * a.hz ? b : a));
     biggest.store = 'market';
   }
@@ -210,11 +250,11 @@ export function generateTown(seed: number, center = { x: 0, z: 100 }): Town {
     const free = LOT - 2 * LOT_INSET;
     // A store's door faces the nearest street.
     let frontSide = -1; // 0: -Z, 1: +Z, 2: -X, 3: +X, as for the containers below
-    if (b.store) {
+    if (b.store || b.housing) {
       const gaps = [b.z - b.hz - roadsZ[j], roadsZ[j + 1] - (b.z + b.hz), b.x - b.hx - roadsX[i], roadsX[i + 1] - (b.x + b.hx)];
       frontSide = gaps.indexOf(Math.min(...gaps));
       b.front = [Math.PI, 0, -Math.PI / 2, Math.PI / 2][frontSide];
-      placeShelves(b, containers);
+      if (b.store) placeShelves(b, containers);
     }
 
     const wanted = 1 + Math.floor(rand() * 3);
@@ -246,7 +286,7 @@ export function generateTown(seed: number, center = { x: 0, z: 100 }): Town {
     }
   }
 
-  const junkyard = generateJunkyard(rand, center.x, roadsZ[0] - ROAD / 2 - 2 - YARD.hz, containers);
+  const junkyard = generateJunkyard(rand, center.x, roadsZ[0] - ROAD / 2 - 2 - YARD.hz, options.junkyard === false ? [] : containers);
 
   const solids: Solid[] = [];
   for (const b of buildings) {
@@ -254,19 +294,69 @@ export function generateTown(seed: number, center = { x: 0, z: 100 }): Town {
     else solids.push({ x: b.x, z: b.z, hx: b.hx, hz: b.hz, height: b.height });
   }
   const cargoBox = pieceBox(junkyard.cargo);
-  solids.push(...junkyard.fence, ...junkyard.wrecks, junkyard.shed, ...junkyard.tires, { x: cargoBox.x, z: cargoBox.z, hx: cargoBox.hx, hz: cargoBox.hz, height: cargoBox.height });
+  if (options.junkyard !== false) {
+    solids.push(...junkyard.fence, ...junkyard.wrecks, ...workshopWalls(junkyard), ...junkyard.tires, { x: cargoBox.x, z: cargoBox.z, hx: cargoBox.hx, hz: cargoBox.hz, height: cargoBox.height });
+    if (junkyard.trader) solids.push(junkyard.trader.counter, junkyard.trader.person);
+  }
+  for (const c of containers) c.id += options.containerOffset ?? 0;
 
   return {
+    districtKind: options.neighborhood === 'apartments' ? 'apartments' : undefined,
     center,
     roadsX,
     roadsZ,
     buildings,
     containers,
     junkyard,
+    hasJunkyard: options.junkyard !== false,
     solids,
     carSpawn: { x: junkyard.gateX, z: junkyard.z + 1, yaw: 0 },
     playerSpawn: { x: junkyard.gateX + 6, z: roadsZ[0], yaw: Math.PI },
   };
+}
+
+function generateStreetDistrict(seed: number, center: { x: number; z: number }, kind: 'homes' | 'business', offset: number): Town {
+  const town = generateTown(seed, center, { grid: 2, junkyard: false });
+  const rand = makeRandom(seed * 31 + 17);
+  town.districtKind = kind === 'homes' ? 'homes' : 'shopping';
+  town.roadsX = [center.x - LOT, center.x + LOT];
+  town.roadsZ = [center.z - LOT, center.z + LOT];
+  town.buildings = [];
+  town.containers = [];
+  town.solids = [];
+  if (kind === 'homes') {
+    town.lawns = [{ x: center.x, z: center.z, hx: 25, hz: 6 }];
+    town.trees = [-17.5, 17.5].map(x => ({ x: center.x + x, z: center.z, height: 7, radius: 2.5 }));
+    for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+      const b: Building = {
+        id: town.buildings.length, x: center.x + (i - 1) * 17.5, z: center.z + side * 13,
+        hx: 4.8 + rand(), hz: 5 + rand(), height: 3.2 + Math.floor(rand() * 2) * 2.8,
+        color: BUILDING_COLORS[Math.floor(rand() * BUILDING_COLORS.length)],
+        housing: 'home', front: side > 0 ? 0 : Math.PI,
+      };
+      town.buildings.push(b);
+      town.solids.push({ x: b.x, z: b.z, hx: b.hx, hz: b.hz, height: b.height });
+      town.lawns.push({ x: b.x, z: b.z, hx: 8, hz: 10 });
+      town.trees.push({ x: b.x - 6.3, z: b.z + side * 7.5, height: 6 + rand() * 2, radius: 1.8 });
+      const def = CONTAINERS.crate;
+      town.containers.push({ id: offset + town.containers.length, kind: 'crate', x: b.x,
+        z: b.z - side * (b.hz + def.hz + 0.7), hx: def.hx, hz: def.hz, height: def.height });
+    }
+    town.solids.push(...town.trees.map(t => ({ x: t.x, z: t.z, hx: 0.2, hz: 0.2, height: t.height * 0.65 })));
+  } else {
+    town.yard = { x: center.x, z: center.z + 7, hx: 23, hz: 17 };
+    town.parking = { x: center.x, z: center.z + 3, hx: 21, hz: 3 };
+    for (let i = 0; i < 4; i++) {
+      const b: Building = { id: i, x: center.x + (i - 1.5) * 10.8, z: center.z - 13.5,
+        hx: 5.35, hz: 7.5, height: 4.8 + (i % 2) * 0.6,
+        color: BUILDING_COLORS[i], store: i % 2 === 0 ? 'market' : 'hardware', front: 0 };
+      town.buildings.push(b);
+      town.solids.push(...storeWalls(b).map(w => ({ ...w, height: b.height })));
+      placeShelves(b, town.containers);
+    }
+    for (const c of town.containers) c.id += offset;
+  }
+  return town;
 }
 
 /** Shelves along the back wall and both side walls of a store, the aisle down the middle left clear. */
@@ -305,7 +395,7 @@ const PART_RADIUS: Record<PartKind, number> = {
   headlights: 0.4,
 };
 
-function generateJunkyard(rand: () => number, x: number, z: number, containers: ContainerSpawn[]): Junkyard {
+export function generateJunkyard(rand: () => number, x: number, z: number, containers: ContainerSpawn[], starter = true): Junkyard {
   const { hx, hz, fence: t, fenceHeight: h, gateHalf } = YARD;
   const gateX = x;
   const fence: Solid[] = [
@@ -339,7 +429,7 @@ function generateJunkyard(rand: () => number, x: number, z: number, containers: 
   // Decorative vehicle silhouettes, including the roof rack and the taller pickup cabs.
   const wreckHeights = [1.60, 1.70, 1.50, 1.25, 1.70];
   wrecks.forEach((w, index) => { w.height = wreckHeights[index]; });
-  const shed: Solid = { x: x + hx - 3, z: z + hz - 3.2, hx: 2, hz: 1.6, height: 2.7 };
+  const shed: Solid = { x: x + hx - (starter ? 5 : 3), z: z + hz - 3.2, hx: starter ? 3 : 2, hz: starter ? 2.6 : 1.6, height: 2.7 };
   const tires: Solid[] = [
     { x: x - hx + 1.6, z: z - hz + 1.6, hx: 0.55, hz: 0.55, height: 0.9 },
     { x: x + hx - 1.6, z: z - hz + 1.6, hx: 0.55, hz: 0.55, height: 1.1 },
@@ -349,15 +439,15 @@ function generateJunkyard(rand: () => number, x: number, z: number, containers: 
   const toolbox: ContainerSpawn = {
     id: containers.length,
     kind: 'toolbox',
-    x: shed.x - shed.hx - 0.6,
-    z: shed.z + 0.4,
+    x: shed.x - shed.hx - (starter ? 0.8 : 0.6),
+    z: shed.z + (starter ? -1.8 : 0.4),
     hx: CONTAINERS.toolbox.hz,
     hz: CONTAINERS.toolbox.hx,
     height: CONTAINERS.toolbox.height,
-    fixedLoot: [
+    fixedLoot: starter ? [
       { id: 'wrench', count: 1 },
       { id: 'duct_tape', count: 1 },
-    ],
+    ] : undefined,
   };
   containers.push(toolbox);
 
@@ -377,11 +467,16 @@ function generateJunkyard(rand: () => number, x: number, z: number, containers: 
   };
   const cargoBox = pieceBox(cargo);
   const keepOff: Box2[] = [car, driveOut, ...wrecks, shed, ...tires, toolbox, cargoBox];
+  const trader = starter ? {
+    counter: { x: shed.x + 0.6, z: shed.z - 0.7, hx: 1.4, hz: 0.45, height: 1 },
+    person: { x: shed.x + 0.6, z: shed.z - 1.8, hx: 0.3, hz: 0.3, height: 1.8 },
+  } : undefined;
+  if (trader) keepOff.push({ x: shed.x - shed.hx - 1.5, z: shed.z, hx: 1.5, hz: 1.3 });
   // The big rig tyre lies against the back fence in the gap between two wrecks.
   const rigTire = { x: x + 12, z: z - hz + 1.8, yaw: rand() * Math.PI * 2 };
   keepOff.push({ x: rigTire.x, z: rigTire.z, hx: 0.7, hz: 0.7 });
   const parts: PartSpawn[] = [];
-  for (const kind of PART_KINDS) {
+  for (const kind of starter ? PART_KINDS : []) {
     // The four wheels are one stack of tyres, not four loose ones: they all go in the same spot, one on top of another.
     const stacked = kind === 'wheel';
     let stackAt: { x: number; z: number; yaw: number } | null = null;
@@ -407,7 +502,7 @@ function generateJunkyard(rand: () => number, x: number, z: number, containers: 
       }
     }
   }
-  return { x, z, hx, hz, gateX, fence, wrecks, shed, tires, parts, rigTire, cargo };
+  return { x, z, hx, hz, gateX, fence, wrecks, shed, tires, parts, rigTire, cargo, trader };
 }
 
 function nearBuilding(c: Box2, b: Box2): boolean {

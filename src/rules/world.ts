@@ -13,10 +13,15 @@
 //     country around it is made desert, and a starting point is found out in the desert a walk away, from
 //     where the town is the way ahead.
 //
+// generateWorld returns the hydrological routing draft with its original mountain relief retained.
+// After planPlaces and planRoads, call restoreMountains once, BEFORE creating ground/render/physics:
+// it restores inter-road relief while reserving road corridors, drainage and settlement pads.
+//
 // The world is a square grid of heights. Anything that needs the ground (the drawn terrain, walking,
 // driving, the map) asks this one place, so they always agree.
 
 import { fbm, noise } from './terrain';
+import type { Box2 } from './geometry';
 
 export interface WorldSpec {
   seed: number;
@@ -64,6 +69,11 @@ export interface WorldMap {
   half: number;
   /** Ground height at each vertex: the bed under any water. Index = row * n + col; row is Z, col is X. */
   ground: Float32Array;
+  /** Unmodified blurred mountain relief, retained for road-first terrain co-design. */
+  mountainRelief: Float32Array;
+  /** Flood surface and upstream-first order of the draft drainage tree. */
+  drainageSurface: Float32Array;
+  drainageOrder: Int32Array;
   /** Water surface height at each vertex, or NO_WATER. The ocean is at SEA_LEVEL. */
   water: Float32Array;
   kind: Uint8Array;
@@ -209,6 +219,23 @@ export function generateWorld(spec: WorldSpec = WORLD): WorldMap {
 
   // Soften the heights a little: no needle peaks, and slopes gentle enough that rivers and roads can follow them.
   blur(base, n, 2);
+  const mountainRelief = base.slice();
+  // A low-gradient routing draft, NOT the finished island. Once the network is fixed,
+  // restore mountain relief between its reserved corridors (see restoreMountains).
+  const rise = spacing * 0.06;
+  for (const direction of [1, -1]) {
+    for (let r = direction > 0 ? 0 : n - 1; r >= 0 && r < n; r += direction) {
+      for (let c = direction > 0 ? 0 : n - 1; c >= 0 && c < n; c += direction) {
+        const i = r * n + c;
+        if (base[i] <= 0) continue;
+        for (const [dr, dc] of [[0, -direction], [-direction, -1], [-direction, 0], [-direction, 1]]) {
+          const row = r + dr, col = c + dc;
+          if (row < 0 || col < 0 || row >= n || col >= n) continue;
+          base[i] = Math.min(base[i], Math.max(0, base[row * n + col]) + rise * (dr && dc ? Math.SQRT2 : 1));
+        }
+      }
+    }
+  }
 
   // 2. Water flows downhill. Priority flood from the sea and the map edge inwards: each cell is
   // reached from its lowest way out, which becomes its flow direction, and any hollow is raised to
@@ -319,7 +346,7 @@ export function generateWorld(spec: WorldSpec = WORLD): WorldMap {
     if (p >= 0 && kind[p] === KIND.ocean) riverMouths++;
     const size = Math.log2(1 + accumulation[i] / threshold);
     const channel = 0.7 + 0.55 * size; // half width of the water, in cells
-    const depth = 1 + 0.9 * size; // metres below the surface
+    const depth = Math.min(3, 1 + 0.9 * size); // bounded channel depth in this small island
     const surface = filled[i];
     const reach = Math.ceil(channel * 1.8);
     const row = (i / n) | 0;
@@ -334,10 +361,11 @@ export function generateWorld(spec: WorldSpec = WORLD): WorldMap {
         const t = Math.hypot(dr, dc) / channel; // 0 at the middle, 1 at the water's edge
         if (t > 1.8) continue;
         if (t <= 0.9) {
-          ground[j] = Math.min(ground[j], surface - depth * (1 - t * t));
+          ground[j] = Math.min(ground[j], filled[j] - depth * (1 - t * t));
           if (kind[j] !== KIND.lake) kind[j] = KIND.river;
-          // Where stamps overlap, take the lowest surface, so water never appears to climb.
-          water[j] = water[j] === NO_WATER ? surface : Math.min(water[j], surface);
+          // Use the drainage surface at this cell, not a neighbouring stamp's elevation.
+          // Taking the lowest overlapping stamp can put an upstream cell below its outlet.
+          water[j] = filled[j];
         } else {
           // The banks climb away from the water, so the valley has sides rather than a wall.
           ground[j] = Math.min(ground[j], surface + (t - 0.9) * channel * spacing * 0.6);
@@ -347,7 +375,8 @@ export function generateWorld(spec: WorldSpec = WORLD): WorldMap {
   }
 
   // 4. The town site, then the desert around it, then the player's starting point.
-  const draft = { spec, n, spacing, half, ground, water, kind } as unknown as WorldMap;
+  const draft = { spec, n, spacing, half, ground, water, kind, mountainRelief,
+    drainageSurface: filled, drainageOrder: Int32Array.from(order).reverse() } as unknown as WorldMap;
   const site = findTownSite(draft);
   flattenDisc(ground, water, kind, n, half, spacing, site.x, site.z, site.height, TOWN_FLAT, TOWN_BLEND);
   const aridity = new Float32Array(count);
@@ -392,6 +421,9 @@ export function generateWorld(spec: WorldSpec = WORLD): WorldMap {
     spacing,
     half,
     ground,
+    mountainRelief,
+    drainageSurface: filled,
+    drainageOrder: draft.drainageOrder,
     water,
     kind,
     flowTo,
@@ -620,6 +652,20 @@ export function waterLevel(map: WorldMap, x: number, z: number): number | null {
   for (const j of [i, i + 1, i + map.n, i + map.n + 1]) level = Math.max(level, map.water[j]);
   if (level === NO_WATER) return null;
   return level > groundHeight(map, x, z) ? level : null;
+}
+
+/** Reject wet grid cells anywhere under a footprint, including cells intersecting its edges. */
+export function isDryFootprint(map: WorldMap, box: Box2, setback = 0): boolean {
+  const x0 = box.x - box.hx - setback, x1 = box.x + box.hx + setback;
+  const z0 = box.z - box.hz - setback, z1 = box.z + box.hz + setback;
+  if (x0 < -map.half || x1 > map.half || z0 < -map.half || z1 > map.half) return false;
+  const c0 = Math.floor((x0 + map.half) / map.spacing), c1 = Math.ceil((x1 + map.half) / map.spacing);
+  const r0 = Math.floor((z0 + map.half) / map.spacing), r1 = Math.ceil((z1 + map.half) / map.spacing);
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+    const i = r * map.n + c;
+    if (map.kind[i] !== KIND.land || map.water[i] !== NO_WATER || map.ground[i] <= SEA_LEVEL) return false;
+  }
+  return true;
 }
 
 /** What is at a world position: land, ocean, river or lake (the nearest grid point decides). */

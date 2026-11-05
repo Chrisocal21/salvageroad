@@ -36,7 +36,7 @@ describe('world shape', () => {
       const { stats } = generateWorld(small(seed));
       expect(stats.landFraction).toBeGreaterThan(0.2);
       expect(stats.landFraction).toBeLessThan(0.65);
-      expect(stats.highest).toBeGreaterThan(150); // real hills and mountains
+      expect(stats.highest).toBeGreaterThan(100); // broad highlands on the road-accessible 12 km island
       expect(stats.deepest).toBeLessThan(-40); // real deep water
     }
   });

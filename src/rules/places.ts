@@ -18,10 +18,12 @@ export interface Place {
   name: string;
   x: number;
   z: number;
-  /** Ground height at the centre. */
+  /** Ground height at the centre; residential sites are fitted to the road profile by planRoads. */
   height: number;
   /** About how far the built-up area reaches, in metres. */
   radius: number;
+  /** A town expanded into a dense city district without losing its regional identity. */
+  urban?: boolean;
 }
 
 export interface Dock extends Place {
@@ -286,16 +288,22 @@ export function planPlaces(map: WorldMap, options: PlanOptions = DEFAULT_PLAN): 
 
   // Lookouts: high dry ground, for trails to climb to.
   const high: Candidate[] = [];
+  const lookoutHeight = Math.min(140, map.stats.highest * 0.55);
   for (let z = -map.half + 200; z < map.half - 200; z += 120) {
     for (let x = -map.half + 200; x < map.half - 200; x += 120) {
       const h = groundHeight(map, x, z);
-      if (h > 140 && dryAt(map, x, z, 100)) high.push({ x, z, height: h, dry: 0, rough: 0 });
+      if (h > lookoutHeight && dryAt(map, x, z, lookoutHeight)) high.push({ x, z, height: h, dry: 0, rough: 0 });
     }
   }
-  for (const c of pick(high, taken, { count: options.lookouts, apart: 1500, minDry: 0, maxRough: 1e9, score: (c) => -c.height + rand() * 60 })) {
+  for (const c of pick(high, taken, { count: options.lookouts, apart: 750, minDry: 0, maxRough: 1e9, score: (c) => -c.height + rand() * 60 })) {
     add('lookout', c.x, c.z, c.height);
   }
 
+  const northernTown = places.filter(p => p.kind === 'town' && p.id !== startPlace.id).sort((a, b) => a.z - b.z)[0];
+  if (northernTown) {
+    northernTown.urban = true;
+    northernTown.radius = RADIUS.city;
+  }
   return { places, docks };
 }
 

@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addItem, createInventory } from '../src/rules/inventory';
 import { createHud } from '../src/ui/hud';
+import { makeTrader } from '../src/rules/trade';
 
 function setup() {
   document.body.replaceChildren();
@@ -129,6 +130,86 @@ describe('hud build bar', () => {
     expect(q('.hud-build-status').classList.contains('bad')).toBe(true);
     hud.setBuild(null);
     expect(q('.hud-build').hidden).toBe(true);
+  });
+
+  describe('yard barter screen', () => {
+    it('labels the workshop trader as tools and vehicle parts', () => {
+      const { hud, q } = setup();
+      hud.openTrade(makeTrader(1, 0, 'tools-parts'), createInventory());
+      expect(q('#hud-trade-title').textContent).toContain('Tools and vehicle parts');
+      expect(q('.hud-trade-goods').textContent).toContain('Your pack is empty');
+    });
+    const button = (label: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    const action = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('.hud-trade-actions button')].find(b => b.textContent === name)!;
+    const trader = () => {
+      const t = makeTrader(1, 0);
+      t.stock = [{ id: 'tire', count: 3 }, { id: 'jerky', count: 9 }];
+      t.margin = 1.3; t.floor = 1.1; t.patience = 2;
+      return t;
+    };
+    it('opens an accessible empty-pack screen without changing stock', () => {
+      const { hud, q } = setup(), t = trader();
+      const before = structuredClone(t);
+      hud.openTrade(t, createInventory());
+      expect(hud.isTradeOpen()).toBe(true);
+      expect(q('.hud').classList.contains('trading')).toBe(true);
+      expect(q('[role="dialog"]').getAttribute('aria-modal')).toBe('true');
+      expect(q('.hud-trade').textContent).toContain('Your pack is empty');
+      expect(action('Trade').disabled).toBe(true);
+      hud.closeTrade();
+      expect(hud.isTradeOpen()).toBe(false);
+      expect(q('.hud').classList.contains('trading')).toBe(false);
+      expect(t).toEqual(before);
+    });
+    it('selects quantities, haggles, trades and refreshes the pack and stock', () => {
+      const { hud, q } = setup(), t = trader(), inv = createInventory();
+      addItem(inv, 'canned_beans', 6);
+      hud.setInventory(inv);
+      hud.openTrade(t, inv);
+      button('Ask for tire').click();
+      for (let i = 0; i < 5; i++) button('Offer canned beans').click();
+      expect(action('Trade').disabled).toBe(true);
+      button('Offer canned beans').click();
+      expect(action('Trade').disabled).toBe(false);
+      action('Haggle').click();
+      expect(t.margin).toBeCloseTo(1.22);
+      action('Trade').click();
+      expect(inv.slots.filter(Boolean)).toEqual([{ id: 'tire', count: 1 }]);
+      expect(t.stock.find(s => s.id === 'tire')!.count).toBe(2);
+      expect(q('.hud-trade-message').textContent).toBe('Trade completed.');
+      expect(q('.hud-hotbar').textContent).toContain('tire');
+      hud.closeTrade();
+      hud.openTrade(t, inv);
+      expect(t.margin).toBeCloseTo(1.22);
+      expect(q('.hud-trade-verdict').textContent).toContain('Offer value: 0');
+    });
+    it('shows a full-pack failure and leaves both sides untouched', () => {
+      const { hud, q } = setup(), t = trader(), inv = createInventory(1);
+      addItem(inv, 'canned_beans', 6);
+      hud.openTrade(t, inv);
+      button('Offer canned beans').click();
+      button('Ask for jerky').click();
+      const before = structuredClone({ t, inv });
+      action('Trade').click();
+      expect(q('.hud-trade-message').textContent).toContain('Nothing was exchanged');
+      expect({ t, inv }).toEqual(before);
+    });
+    it('keeps refusal across reopening and traps keyboard focus in the screen', () => {
+      const { hud, q } = setup(), t = trader(), inv = createInventory();
+      addItem(inv, 'canned_beans', 6);
+      hud.openTrade(t, inv);
+      const close = q('.hud-trade .hud-inventory-title button');
+      close.focus();
+      close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(action('Haggle'));
+      action('Haggle').click(); action('Haggle').click(); action('Haggle').click();
+      expect(t.refusing).toBe(true);
+      hud.closeTrade();
+      hud.openTrade(t, inv);
+      expect(action('Trade').disabled).toBe(true);
+      expect(action('Haggle').disabled).toBe(true);
+      expect(q('.hud-trade-message').textContent).toContain('refuses');
+    });
   });
 
   it('shows the vehicle storage beside the pack and moves a clicked stack across', () => {

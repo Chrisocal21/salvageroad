@@ -1,5 +1,6 @@
 import { ITEMS } from '../data/items';
 import type { Inventory } from '../rules/inventory';
+import { appraise, haggle, trade, type Offer, type Trader, type TradeResult } from '../rules/trade';
 import './hud.css';
 
 // The in-game HUD, drawn as HTML on top of the canvas. The game only talks to this small interface, so
@@ -27,6 +28,9 @@ export interface Hud {
   refreshStorage(): void;
   closeStorage(): void;
   isStorageOpen(): boolean;
+  openTrade(trader: Trader, pack: Inventory): void;
+  closeTrade(): void;
+  isTradeOpen(): boolean;
   /** Small controls reminder in the corner. */
   setHint(text: string): void;
   /** Developer readout: frame rate and so on. Empty text hides it. */
@@ -129,6 +133,123 @@ export function createHud(parent: HTMLElement): Hud {
     onMove: (from: 'store' | 'pack', index: number) => void;
   } | null = null;
 
+  const tradeOverlay = el('div', 'hud-trade-overlay', root);
+  tradeOverlay.hidden = true;
+  const tradePanel = el('div', 'hud-trade', tradeOverlay);
+  tradePanel.setAttribute('role', 'dialog');
+  tradePanel.setAttribute('aria-modal', 'true');
+  tradePanel.setAttribute('aria-labelledby', 'hud-trade-title');
+  const tradeHead = el('div', 'hud-inventory-title', tradePanel);
+  const tradeTitle = el('span', '', tradeHead);
+  tradeTitle.id = 'hud-trade-title';
+  const closeTradeButton = el('button', '', tradeHead, 'Close');
+  closeTradeButton.type = 'button';
+  el('p', '', tradePanel, 'Barter only. Choose goods on both sides; no money changes hands.');
+  const tradeColumns = el('div', 'hud-trade-columns', tradePanel);
+  const tradeSides = ['You give', 'You ask'].map(text => {
+    const side = el('div', '', tradeColumns);
+    el('h3', '', side, text);
+    return el('div', 'hud-trade-goods', side);
+  });
+  const tradeVerdict = el('p', 'hud-trade-verdict', tradePanel);
+  const tradeMessage = el('p', 'hud-trade-message', tradePanel);
+  tradeMessage.setAttribute('role', 'status');
+  const tradeActions = el('div', 'hud-trade-actions', tradePanel);
+  const haggleButton = el('button', '', tradeActions, 'Haggle');
+  const dealButton = el('button', '', tradeActions, 'Trade');
+  haggleButton.type = dealButton.type = 'button';
+  el('p', 'hud-inventory-hint', tradePanel, 'Each + selects one item. E or Esc closes. Haggling costs patience.');
+  let tradeState: { trader: Trader; pack: Inventory; give: Offer[]; get: Offer[]; message: string } | null = null;
+  let tradeFocus: HTMLElement | null = null;
+
+  function closeTrade() {
+    tradeOverlay.hidden = true;
+    root.classList.remove('trading');
+    tradeState = null;
+    tradeFocus?.focus();
+    tradeFocus = null;
+  }
+  closeTradeButton.addEventListener('click', closeTrade);
+  tradeOverlay.addEventListener('click', event => { if (event.target === tradeOverlay) closeTrade(); });
+  tradePanel.addEventListener('keydown', event => {
+    if (event.key !== 'Tab') return;
+    const buttons = [...tradePanel.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+    const first = buttons[0], last = buttons.at(-1)!;
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
+  function renderTrade() {
+    const st = tradeState;
+    if (!st) return;
+    const focused = tradePanel.contains(document.activeElement) ? document.activeElement?.getAttribute('aria-label') : null;
+    const totals = new Map<string, number>();
+    for (const slot of st.pack.slots) if (slot) totals.set(slot.id, (totals.get(slot.id) ?? 0) + slot.count);
+    const lists = [[...totals].map(([id, count]) => ({ id, count })), st.trader.stock];
+    lists.forEach((list, side) => {
+      tradeSides[side].replaceChildren();
+      if (!list.length) el('p', '', tradeSides[side], side === 0 ? 'Your pack is empty. Bring goods to barter.' : 'No goods left.');
+      for (const item of list) {
+        const selected = side === 0 ? st.give : st.get;
+        const amount = selected.find(o => o.id === item.id)?.count ?? 0;
+        const row = el('div', 'hud-trade-row', tradeSides[side]);
+        el('span', '', row, ITEMS[item.id].name);
+        const minus = el('button', '', row, '-');
+        minus.type = 'button';
+        minus.setAttribute('aria-label', `Remove ${side === 0 ? 'offered' : 'requested'} ${ITEMS[item.id].name}`);
+        minus.disabled = amount === 0 || st.trader.refusing;
+        el('span', 'hud-trade-count', row, `${amount} / ${item.count}`);
+        const plus = el('button', '', row, '+');
+        plus.type = 'button';
+        plus.setAttribute('aria-label', `${side === 0 ? 'Offer' : 'Ask for'} ${ITEMS[item.id].name}`);
+        plus.disabled = amount >= item.count || st.trader.refusing;
+        const change = (delta: number) => {
+          const offer = selected.find(o => o.id === item.id);
+          if (offer) offer.count += delta;
+          else selected.push({ id: item.id, count: delta });
+          st.give = st.give.filter(o => o.count > 0);
+          st.get = st.get.filter(o => o.count > 0);
+          st.message = '';
+          renderTrade();
+        };
+        minus.addEventListener('click', () => change(-1));
+        plus.addEventListener('click', () => change(1));
+      }
+    });
+    const verdict = appraise(st.trader, st.give, st.get);
+    tradeVerdict.textContent = `Offer value: ${verdict.giveWorth} | Asked value: ${verdict.getWorth} | Trader wants: ${verdict.wanted}. Haggles left: ${st.trader.patience}.`;
+    tradeMessage.textContent = st.message || (st.trader.refusing ? 'The trader refuses to deal for now.' :
+      !st.get.length ? 'Choose what you want and what to give.' : verdict.deal ? 'The trader will accept this offer.' : 'The trader wants more goods.');
+    haggleButton.disabled = st.trader.refusing;
+    dealButton.disabled = !verdict.deal || !st.give.length;
+    if (focused) ([...tradePanel.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+      .find(button => button.getAttribute('aria-label') === focused) ?? closeTradeButton).focus();
+  }
+  haggleButton.addEventListener('click', () => {
+    if (!tradeState) return;
+    const result = haggle(tradeState.trader);
+    tradeState.message = result === 'better' ? 'The trader lowered their asking value.' :
+      result === 'no_better' ? 'That is their best offer. Another push still costs patience.' : 'The trader refuses to deal for now.';
+    renderTrade();
+  });
+  dealButton.addEventListener('click', () => {
+    if (!tradeState) return;
+    const st = tradeState;
+    const result = trade(st.trader, st.pack, st.give, st.get);
+    const errors: Record<Extract<TradeResult, { ok: false }>['reason'], string> = {
+      empty: 'Choose goods on both sides.', invalid_offer: 'That offer is not valid.',
+      not_enough_worth: 'The trader wants more goods.', you_lack: 'You no longer have those goods.',
+      trader_lacks: 'The trader no longer has those goods.', no_room: 'Your pack has no room. Nothing was exchanged.',
+      refuses: 'The trader refuses to deal for now.',
+    };
+    st.message = result.ok ? 'Trade completed.' : errors[result.reason];
+    if (result.ok) {
+      st.give = []; st.get = [];
+      lastInventory = st.pack;
+      renderHotbar();
+    }
+    renderTrade();
+  });
+
   const buildEl = el('div', 'hud-build', root);
   const buildStatus = el('div', 'hud-build-status', buildEl);
   const buildTitle = el('div', 'hud-build-title', buildEl);
@@ -207,6 +328,21 @@ export function createHud(parent: HTMLElement): Hud {
   let storageTitle = '';
 
   return {
+    openTrade(trader, pack) {
+      if (!tradeOverlay.hidden) closeTrade();
+      tradeFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      panel.hidden = true;
+      storageEl.hidden = true;
+      storageState = null;
+      tradeState = { trader, pack, give: [], get: [], message: '' };
+      tradeTitle.textContent = `${trader.name} - ${trader.specialty === 'tools-parts' ? 'Tools and vehicle parts' : 'Salvage yard barter'}`;
+      tradeOverlay.hidden = false;
+      root.classList.add('trading');
+      renderTrade();
+      closeTradeButton.focus();
+    },
+    closeTrade,
+    isTradeOpen: () => !tradeOverlay.hidden,
     openStorage(titleText, store, pack, onMove) {
       storageState = { store, pack, onMove };
       storageTitle = titleText;

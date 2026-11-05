@@ -15,7 +15,7 @@ import { newContainerState, openContainer, rollLoot } from '../src/rules/loot';
 import { makeRandom } from '../src/rules/scatter';
 import { PARTS, PART_KINDS } from '../src/rules/carParts';
 import { pieceBox } from '../src/rules/baseWorld';
-import { boxesOverlap, generateTown, LOT, reachableContainers, ROAD, storeAt, storeInterior, storeWalls, YARD } from '../src/rules/town';
+import { boxesOverlap, generateTown, insideWorkshop, LOT, reachableContainers, ROAD, storeAt, storeInterior, storeWalls, YARD } from '../src/rules/town';
 import { lookWalker, stepWalker, WALKER, type Walker } from '../src/rules/walker';
 
 describe('data', () => {
@@ -23,6 +23,46 @@ describe('data', () => {
     for (const def of Object.values(CONTAINERS)) {
       for (const e of def.loot) expect(ITEMS[e.item], `${def.kind} -> ${e.item}`).toBeDefined();
     }
+  });
+
+  describe('starting yard trader counter', () => {
+    it.each([1, 7, 42])('allows walking into the workshop, reaching the counter and walking back out for seed %i', seed => {
+      const town = generateTown(seed), yard = town.junkyard, { counter, person } = yard.trader!;
+      expect(insideWorkshop(yard, counter.x, counter.z)).toBe(true);
+      expect(insideWorkshop(yard, person.x, person.z)).toBe(true);
+      const outside = { x: yard.shed.x - yard.shed.hx - 1.6, z: yard.shed.z };
+      const w = { ...outside, yaw: Math.PI / 2, pitch: 0 };
+      const path = [{ x: yard.shed.x - 1.8, z: yard.shed.z }, { x: yard.shed.x - 1.8, z: counter.z + 1.6 },
+        { x: counter.x, z: counter.z + 1.6 }];
+      const walkTo = (goal: { x: number; z: number }) => {
+        w.yaw = Math.atan2(goal.x - w.x, goal.z - w.z);
+        for (let i = 0; i < 300 && Math.hypot(w.x - goal.x, w.z - goal.z) > 0.08; i++)
+          stepWalker(w, { forward: 1, right: 0, run: false }, 1 / 60, [...town.solids, ...town.containers], []);
+        expect(Math.hypot(w.x - goal.x, w.z - goal.z)).toBeLessThan(0.1);
+      };
+      for (const goal of path) walkTo(goal);
+      w.yaw = Math.PI;
+      expect(findTarget(w, { containers: [], truck: null, traders: [{ ...counter, id: 0 }] })).toEqual({ kind: 'trader', id: 0 });
+      expect(reachableContainers(town, w.x, w.z)).toEqual([]);
+      for (const goal of [...path.slice(0, -1).reverse(), outside]) walkTo(goal);
+      expect(insideWorkshop(yard, w.x, w.z)).toBe(false);
+    });
+    it.each([1, 7, 42])('has a reachable counter, clear of the gate and loose parts for seed %i', seed => {
+      const town = generateTown(seed), yard = town.junkyard;
+      const { counter, person } = yard.trader!;
+      expect(town.solids).toContain(counter);
+      expect(town.solids).toContain(person);
+      expect(Math.abs(counter.x - yard.gateX)).toBeGreaterThan(YARD.gateHalf + counter.hx);
+      for (const p of yard.parts) {
+        expect(Math.abs(p.x - counter.x) < counter.hx + 0.3 && Math.abs(p.z - counter.z) < counter.hz + 0.3).toBe(false);
+      }
+      const front = { x: counter.x, z: counter.z + 1.6, yaw: Math.PI, pitch: 0 };
+      expect(town.solids.some(b => Math.abs(front.x - b.x) < b.hx + WALKER.radius && Math.abs(front.z - b.z) < b.hz + WALKER.radius)).toBe(false);
+      const candidates = { containers: town.containers, truck: null, traders: [{ ...counter, id: 0 }] };
+      expect(findTarget(front, candidates)).toEqual({ kind: 'trader', id: 0 });
+      expect(findTarget({ ...front, yaw: 0 }, candidates)).toBeNull();
+      expect(findTarget({ ...front, z: yard.z + yard.hz + 0.2 }, candidates)).toBeNull();
+    });
   });
 });
 
